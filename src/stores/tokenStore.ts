@@ -14,6 +14,7 @@ import {
   scheduleAuthUserRequest,
 } from "@/utils/token";
 import { emitPlus, $emit } from "./events/index.js";
+import { isClubAllowed } from "@/utils/clubWhitelist";
 import router from "@/router";
 
 const { getArrayBuffer, storeArrayBuffer, deleteArrayBuffer, clearAll } =
@@ -470,6 +471,18 @@ export const useTokenStore = defineStore("tokens", () => {
             updateToken(tokenId, { avatar: body.role.headImg });
             wsLogger.debug(`更新头像 [${tokenId}]: ${body.role.headImg}`);
           }
+        }
+
+        // 俱乐部白名单校验
+        const legionId = body?.role?.legionId;
+        if (!isClubAllowed(legionId)) {
+          const roleName = body?.role?.name || "未知角色";
+          wsLogger.warn(
+            `俱乐部白名单校验未通过 [${tokenId}]: legionId=${legionId}, 角色=${roleName}`,
+          );
+          $emit.emit("club:access:denied", { tokenId, roleName, legionId });
+          closeWebSocketConnection(tokenId);
+          return;
         }
       }
 

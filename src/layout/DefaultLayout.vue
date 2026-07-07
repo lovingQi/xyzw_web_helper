@@ -200,9 +200,11 @@ import {
 } from "@vicons/ionicons5";
 
 import { useRouter } from 'vue-router'
-import { useMessage } from 'naive-ui'
-import { ref } from 'vue'
+import { useMessage, useDialog } from 'naive-ui'
+import { ref, onMounted, onBeforeUnmount, h } from 'vue'
 import { isNowInLegionWarTime } from '@/utils/clubBattleUtils'
+import { $emit } from '@/stores/events/index.js'
+import { CLUB_DENY_MESSAGE, CLUB_AVATAR_PATH } from '@/utils/clubWhitelist'
 
 const tokenStore = useTokenStore();
 const router = useRouter();
@@ -227,6 +229,47 @@ const handleUserAction = async (key) => {
       break;
   }
 };
+
+const dialog = useDialog();
+
+const handleClubAccessDenied = (data) => {
+  const { roleName, legionId } = data;
+  dialog.warning({
+    title: "访问受限",
+    content: () =>
+      h("div", { style: "text-align: center; padding: 16px 0;" }, [
+        h("img", {
+          src: CLUB_AVATAR_PATH,
+          alt: "东方树叶",
+          style:
+            "width: 120px; height: 120px; border-radius: 50%; margin-bottom: 16px; border: 3px solid #18a058; object-fit: cover;",
+        }),
+        h(
+          "p",
+          {
+            style:
+              "font-size: 18px; font-weight: bold; margin-bottom: 8px; color: #18a058;",
+          },
+          CLUB_DENY_MESSAGE,
+        ),
+        h(
+          "p",
+          { style: "font-size: 13px; color: #999; margin-top: 12px;" },
+          `角色「${roleName}」不在允许的俱乐部中（当前俱乐部ID: ${legionId || "无"}）`,
+        ),
+      ]),
+    positiveText: "我知道了",
+    maskClosable: false,
+  });
+};
+
+onMounted(() => {
+  $emit.on("club:access:denied", handleClubAccessDenied);
+});
+
+onBeforeUnmount(() => {
+  $emit.off("club:access:denied", handleClubAccessDenied);
+});
 </script>
 
 <style scoped lang="scss">
