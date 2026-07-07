@@ -1,0 +1,12 @@
+{
+  "whitelist": [
+    { "id": 7763708, "name": "东方树叶" },
+    { "id": 7764758, "name": "东方树叶二" },
+    { "id": 7781009, "name": "东方树叶三" },
+    { "id": 7787035, "name": "树叶炸鱼团一" },
+    { "id": 7787038, "name": "树叶炸鱼团二" },
+    { "id": 7526736, "name": "自由pk" }
+  ],
+  "denyMessage": "加入东方树叶，做兄弟，在心中",
+  "avatarPath": "/icons/dongfangshuye.png"
+}

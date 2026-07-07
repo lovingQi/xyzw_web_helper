@@ -14,7 +14,7 @@ import {
   scheduleAuthUserRequest,
 } from "@/utils/token";
 import { emitPlus, $emit } from "./events/index.js";
-import { isClubAllowed } from "@/utils/clubWhitelist";
+import { isClubAllowed, loadClubWhitelist } from "@/utils/clubWhitelist";
 import router from "@/router";
 
 const { getArrayBuffer, storeArrayBuffer, deleteArrayBuffer, clearAll } =
@@ -1420,22 +1420,10 @@ export const useTokenStore = defineStore("tokens", () => {
 
   // 初始化
   const initTokenStore = () => {
-    // // 恢复数据
-    // const savedTokens = localStorage.getItem('gameTokens')
-    // const savedSelectedId = localStorage.getItem('selectedTokenId')
-
-    // if (savedTokens) {
-    //   try {
-    //     gameTokens.value = JSON.parse(savedTokens)
-    //   } catch (error) {
-    //     tokenLogger.error('解析Token数据失败:', error.message)
-    //     gameTokens.value = []
-    //   }
-    // }
-
-    // if (savedSelectedId) {
-    //   selectedTokenId.value = savedSelectedId
-    // }
+    // 加载俱乐部白名单配置（异步，不阻塞初始化）
+    loadClubWhitelist().catch((err) => {
+      tokenLogger.warn("俱乐部白名单配置加载失败:", err);
+    });
 
     // 清理过期token
     cleanExpiredTokens();
