@@ -351,18 +351,19 @@ export function createTasksLegacy(deps) {
     if (!isScheduledTask) {
       isRunning.value = false;
       currentRunningTokenId.value = null;
-            addLog({
-      time: new Date().toLocaleTimeString(),
-      message: `=== 批量赠送功法残卷完成: 成功 ${totalSuccess} 个，失败 ${totalFailed} 个 ===`,
-      type: "success",
+      addLog({
+        time: new Date().toLocaleTimeString(),
+        message: `=== 批量赠送功法残卷完成: 成功 ${totalSuccess} 个，失败 ${totalFailed} 个 ===`,
+        type: "success",
       });
-            message.success(
-      `批量赠送功法残卷结束，成功 ${totalSuccess} 个，失败 ${totalFailed} 个`,
+      message.success(
+        `批量赠送功法残卷结束，成功 ${totalSuccess} 个，失败 ${totalFailed} 个`,
       );
-      };
-            return {
-      batchLegacyClaim,
-      batchLegacyGiftSendEnhanced,
-      };
-      }
     }
+  };
+
+  return {
+    batchLegacyClaim,
+    batchLegacyGiftSendEnhanced,
+  };
+}
