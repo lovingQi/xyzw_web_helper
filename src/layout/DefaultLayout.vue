@@ -203,7 +203,7 @@ import { useRouter } from 'vue-router'
 import { useMessage, useDialog } from 'naive-ui'
 import { ref, onMounted, onBeforeUnmount, h } from 'vue'
 import { isNowInLegionWarTime } from '@/utils/clubBattleUtils'
-import { $emit } from '@/stores/events/index.js'
+import { $emit } from '@/stores/events'
 import { CLUB_DENY_MESSAGE, CLUB_AVATAR_PATH } from '@/utils/clubWhitelist'
 
 const tokenStore = useTokenStore();
