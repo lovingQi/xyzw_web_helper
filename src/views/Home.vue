@@ -5,8 +5,8 @@
       <div class="container">
         <div class="nav-content">
           <div class="nav-brand">
-            <img src="/icons/xiaoyugan.png" alt="XYZW" class="brand-logo" />
-            <span class="brand-text">XYZW 游戏管理系统</span>
+            <img src="/icons/dongfangshuye.png" alt="东方树叶" class="brand-logo" />
+            <span class="brand-text">东方树叶 · 咸鱼助手</span>
           </div>
 
           <div class="mobile-menu-button">
@@ -135,8 +135,8 @@
         <div class="container">
           <div class="hero-content">
             <div class="hero-text">
-              <h1 class="hero-title">专业的游戏管理平台</h1>
-              <p class="hero-subtitle">让游戏变得更简单，让管理变得更高效</p>
+              <h1 class="hero-title">加入东方树叶</h1>
+              <p class="hero-subtitle">做兄弟，在心中 🍵</p>
               <div class="hero-actions">
                 <n-button
                   type="primary"
@@ -189,8 +189,8 @@
       <section ref="featuresSection" class="features-section">
         <div class="container">
           <div class="section-header">
-            <h2 class="section-title">核心功能</h2>
-            <p class="section-subtitle">为您提供全方位的游戏管理解决方案</p>
+            <h2 class="section-title">🍵 核心功能</h2>
+            <p class="section-subtitle">以茶会友，以技赋能——东方树叶专属工具箱</p>
           </div>
 
           <div class="features-grid">
@@ -235,21 +235,18 @@
       <div class="container">
         <div class="footer-content">
           <div class="footer-brand">
-            <img src="/icons/xiaoyugan.png" alt="XYZW" class="footer-logo" />
-            <span class="footer-text">XYZW 游戏管理系统</span>
+            <img src="/icons/dongfangshuye.png" alt="东方树叶" class="footer-logo" />
+            <span class="footer-text">东方树叶 · 咸鱼助手</span>
           </div>
           <div class="footer-links">
             <router-link to="/changelog" class="footer-link">
               更新日志
             </router-link>
-            <a href="#" class="footer-link">关于我们</a>
-            <a href="#" class="footer-link">隐私政策</a>
-            <a href="#" class="footer-link">服务条款</a>
-            <a href="#" class="footer-link">联系我们</a>
+            <a href="https://t.me/+SEDhXWN_OpNiMGI1" target="_blank" class="footer-link">TG 群组</a>
           </div>
         </div>
         <div class="footer-bottom">
-          <p>&copy; 2024 XYZW. All rights reserved.</p>
+          <p>🍵 东方树叶 · 做兄弟，在心中</p>
         </div>
       </div>
     </footer>
@@ -294,35 +291,35 @@ const features = ref([
   {
     id: 1,
     icon: markRaw(PersonCircle),
-    title: "角色管理",
-    description: "轻松管理多个游戏角色，统一查看角色信息、等级进度和装备状态",
+    title: "🌿 多号管理",
+    description: "一壶好茶配多盏杯——统一管理所有游戏角色，一键切换自如",
   },
   {
     id: 2,
     icon: markRaw(Cube),
-    title: "任务自动化",
-    description: "智能日常任务系统，自动完成重复性任务，节省您的宝贵时间",
+    title: "⚡ 批量自动化",
+    description: "泡茶的功夫，日常全做完——智能调度 30+ 种自动化任务",
   },
   {
     id: 3,
     icon: markRaw(Ribbon),
-    title: "数据分析",
-    description: "详细的数据统计和分析报告，帮助您更好地了解游戏进度",
+    title: "🏰 俱乐部协同",
+    description: "兄弟齐心，其利断金——盐场战报、发车协调、俱乐部签到一站搞定",
   },
   {
     id: 4,
     icon: markRaw(Settings),
-    title: "个性化设置",
-    description: "灵活的配置选项，根据您的需求定制最适合的管理方案",
+    title: "🔧 灵活定制",
+    description: "定时任务、Cron 表达式、阵容配置——你的茶，你做主",
   },
 ]);
 
 // 统计数据
 const stats = ref([
-  { id: 1, number: "1000+", label: "活跃用户" },
-  { id: 2, number: "50K+", label: "管理角色" },
-  { id: 3, number: "100K+", label: "完成任务" },
-  { id: 4, number: "99.9%", label: "系统稳定性" },
+  { id: 1, number: "5", label: "🍵 兄弟俱乐部" },
+  { id: 2, number: "24/7", label: "🌿 全天候自动化" },
+  { id: 3, number: "30+", label: "⚔️ 一键任务" },
+  { id: 4, number: "∞", label: "🤝 兄弟情义" },
 ]);
 
 // 滚动到功能区域
@@ -434,6 +431,35 @@ onMounted(() => {
   min-height: 80vh;
   display: flex;
   align-items: center;
+  position: relative;
+  overflow: hidden;
+
+  &::before {
+    content: "🍃";
+    position: absolute;
+    top: 15%;
+    right: 8%;
+    font-size: 4rem;
+    opacity: 0.12;
+    animation: float-leaf 6s ease-in-out infinite;
+    pointer-events: none;
+  }
+
+  &::after {
+    content: "🌿";
+    position: absolute;
+    bottom: 20%;
+    left: 5%;
+    font-size: 3.5rem;
+    opacity: 0.1;
+    animation: float-leaf 8s ease-in-out infinite reverse;
+    pointer-events: none;
+  }
+}
+
+@keyframes float-leaf {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50% { transform: translateY(-20px) rotate(10deg); }
 }
 
 .hero-content {
@@ -529,6 +555,29 @@ onMounted(() => {
 .features-section {
   padding: var(--spacing-2xl) 0;
   background: var(--bg-primary);
+  position: relative;
+
+  &::before {
+    content: "🍃";
+    position: absolute;
+    top: 40px;
+    left: 5%;
+    font-size: 3rem;
+    opacity: 0.08;
+    transform: rotate(-15deg);
+    pointer-events: none;
+  }
+
+  &::after {
+    content: "🍵";
+    position: absolute;
+    bottom: 40px;
+    right: 5%;
+    font-size: 3rem;
+    opacity: 0.08;
+    transform: rotate(10deg);
+    pointer-events: none;
+  }
 }
 
 .section-header {

@@ -4,12 +4,12 @@
     <nav class="dashboard-nav">
       <div class="nav-container">
         <div class="nav-brand">
-          <img src="/icons/xiaoyugan.png" alt="XYZW" class="brand-logo" />
+          <img src="/icons/dongfangshuye.png" alt="东方树叶" class="brand-logo" />
           <div class="brand-toggle" @click="isMobileMenuOpen = true">
             <n-icon>
               <Menu />
             </n-icon>
-            <span class="brand-text">XYZW 控制台</span>
+            <span class="brand-text">东方树叶 控制台</span>
           </div>
         </div>
 
@@ -75,9 +75,9 @@
           <n-dropdown :options="userMenuOptions" @select="handleUserAction">
             <div class="user-info">
               <n-avatar
-                :src="selectedToken?.avatar || '/icons/xiaoyugan.png'"
+                :src="selectedToken?.avatar || '/icons/dongfangshuye.png'"
                 size="medium"
-                fallback-src="/icons/xiaoyugan.png"
+                fallback-src="/icons/dongfangshuye.png"
               />
               <span class="username">{{
                 selectedToken?.name || "未选择Token"

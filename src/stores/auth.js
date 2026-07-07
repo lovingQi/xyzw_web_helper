@@ -24,7 +24,7 @@ export const useAuthStore = defineStore("auth", () => {
         id: "local_user_" + Date.now(),
         username: credentials.username,
         email: credentials.email || `${credentials.username}@local.game`,
-        avatar: "/icons/xiaoyugan.png",
+        avatar: "/icons/dongfangshuye.png",
         createdAt: new Date().toISOString(),
       };
 

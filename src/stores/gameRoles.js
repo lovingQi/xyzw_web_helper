@@ -59,7 +59,7 @@ export const useGameRolesStore = defineStore("gameRoles", () => {
         exp: 0,
         gold: 1000, // 默认金币
         vip: false,
-        avatar: roleData.avatar || "/icons/xiaoyugan.png",
+        avatar: roleData.avatar || "/icons/dongfangshuye.png",
       };
 
       // 添加到角色列表

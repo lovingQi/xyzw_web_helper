@@ -5,11 +5,11 @@
       <div class="page-header">
         <div class="header-content">
           <div class="header-top">
-            <img src="/icons/xiaoyugan.png" alt="XYZW" class="brand-logo" />
+            <img src="/icons/dongfangshuye.png" alt="东方树叶" class="brand-logo" />
             <!-- 主题切换按钮 -->
             <ThemeToggle />
           </div>
-          <h1>游戏Token管理</h1>
+          <h1>东方树叶 · Token管理</h1>
         </div>
       </div>
 
@@ -175,7 +175,7 @@
                   :src="token.avatar"
                   round
                   size="small"
-                  fallback-src="/icons/xiaoyugan.png"
+                  fallback-src="/icons/dongfangshuye.png"
                 />
                 {{ token.name }}
                 <a-tag
@@ -378,7 +378,7 @@
                   :src="token.avatar"
                   round
                   size="small"
-                  fallback-src="/icons/xiaoyugan.png"
+                  fallback-src="/icons/dongfangshuye.png"
                 />
 
                 <!-- Token基本信息 -->

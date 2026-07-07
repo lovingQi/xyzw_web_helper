@@ -81,7 +81,7 @@
                 <div class="apply-left">
                   <n-avatar
                     :size="28"
-                    :src="apply.headImg || '/icons/xiaoyugan.png'"
+                    :src="apply.headImg || '/icons/dongfangshuye.png'"
                   />
                   <div class="apply-info">
                     <div class="apply-name">
@@ -131,7 +131,7 @@
                       <template #avatar>
                         <n-avatar
                           :size="64"
-                          :src="club.logo || '/icons/xiaoyugan.png'"
+                          :src="club.logo || '/icons/dongfangshuye.png'"
                           style="box-shadow: 0 2px 8px rgba(0,0,0,0.1);"
                         />
                       </template>
@@ -254,7 +254,7 @@
                       <n-avatar
                         round
                         :size="40"
-                        :src="leader.headImg || '/icons/xiaoyugan.png'"
+                        :src="leader.headImg || '/icons/dongfangshuye.png'"
                         style="border: 2px solid #fff; box-shadow: 0 2px 4px rgba(0,0,0,0.1);"
                       />
                       <div>

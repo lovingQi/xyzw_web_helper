@@ -5,8 +5,8 @@
       <div class="login-card glass">
         <div class="card-header">
           <div class="brand">
-            <img src="/icons/xiaoyugan.png" alt="XYZW" class="brand-logo" />
-            <h1 class="brand-title">XYZW 游戏管理系统</h1>
+            <img src="/icons/dongfangshuye.png" alt="东方树叶" class="brand-logo" />
+            <h1 class="brand-title">东方树叶 · 咸鱼助手</h1>
           </div>
           <p class="welcome-text">欢迎回来，请登录您的账户</p>
         </div>
@@ -118,7 +118,7 @@
       <!-- 功能展示 -->
       <div class="features-showcase">
         <div class="showcase-header">
-          <h2>为什么选择 XYZW？</h2>
+          <h2>为什么选择东方树叶？</h2>
           <p>专业的游戏管理平台，让游戏变得更轻松</p>
         </div>
 

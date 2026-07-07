@@ -163,7 +163,7 @@ const columns = computed(() => {
             size: 32,
             src: row.headImg,
             round: true,
-            fallbackSrc: '/icons/xiaoyugan.png' // 简单的fallback
+            fallbackSrc: '/icons/dongfangshuye.png' // 简单的fallback
           })
         }
         return h(

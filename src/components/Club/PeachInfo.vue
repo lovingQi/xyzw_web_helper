@@ -30,7 +30,7 @@
       <div class="club-vs-container">
         <!-- Own Club (Left) -->
         <div class="club-info own">
-          <n-avatar round :size="80" :src="battleInfo.ownClub?.logo || '/icons/xiaoyugan.png'" class="club-logo" />
+          <n-avatar round :size="80" :src="battleInfo.ownClub?.logo || '/icons/dongfangshuye.png'" class="club-logo" />
           <div class="club-details">
             <div class="club-name">{{ battleInfo.ownClub.serverId }}服 {{ battleInfo.ownClub?.name || "未知" }}</div>
             <div class="club-stats">ID: {{ battleInfo.ownClub.id }}</div>
@@ -47,7 +47,7 @@
 
         <!-- Opponent Club (Right) -->
         <div class="club-info opponent">
-          <n-avatar round :size="80" :src="battleInfo.opponentClub?.logo || '/icons/xiaoyugan.png'" class="club-logo" />
+          <n-avatar round :size="80" :src="battleInfo.opponentClub?.logo || '/icons/dongfangshuye.png'" class="club-logo" />
           <div class="club-details">
             <div class="club-name">{{ battleInfo.opponentClub.serverId }}服 {{ battleInfo.opponentClub?.name || "未知" }}
             </div>

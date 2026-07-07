@@ -163,7 +163,7 @@ const columns = computed(() => {
             size: 32,
             src: row.headImg,
             round: true,
-            fallbackSrc: '/icons/xiaoyugan.png'
+            fallbackSrc: '/icons/dongfangshuye.png'
           })
         }
         return h(

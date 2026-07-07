@@ -31,7 +31,7 @@
           <div class="card-header">
             <div class="role-avatar">
               <img
-                :src="role.avatar || '/icons/xiaoyugan.png'"
+                :src="role.avatar || '/icons/dongfangshuye.png'"
                 :alt="role.name"
               />
             </div>

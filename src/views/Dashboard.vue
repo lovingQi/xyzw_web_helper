@@ -10,7 +10,7 @@
               <h1>
                 欢迎回来，{{ tokenStore.selectedToken?.name || "游戏玩家" }}！
               </h1>
-              <p>今天是 {{ currentDate }}，继续您的游戏管理之旅吧</p>
+              <p>🍵 今天是 {{ currentDate }}，东方树叶与你并肩作战</p>
             </div>
             <div class="welcome-actions">
               <n-button
