@@ -33,10 +33,12 @@ export function createTasksLegacy(deps) {
   /**
    * 批量领取功法残卷
    */
-  const batchLegacyClaim = async () => {
+  const batchLegacyClaim = async (isScheduledTask = false) => {
     if (selectedTokens.value.length === 0) return;
-    isRunning.value = true;
-    shouldStop.value = false;
+    if (!isScheduledTask) {
+      isRunning.value = true;
+      shouldStop.value = false;
+    }
 
     selectedTokens.value.forEach((id) => {
       tokenStatus.value[id] = "waiting";
@@ -53,7 +55,13 @@ export function createTasksLegacy(deps) {
           message: `=== 开始领取功法残卷: ${token.name} ===`,
           type: "info",
         });
-        await ensureConnection(tokenId);
+        if (!isScheduledTask) {
+          await ensureConnection(tokenId);
+        }
+        if (isScheduledTask && tokenStore.getWebSocketStatus(tokenId) !== "connected") {
+          addLog({ time: new Date().toLocaleTimeString(), message: `${token.name} 未连接，跳过`, type: "warning" });
+          return;
+        }
 
         const LegacyClaimHangUpResp = await tokenStore.sendMessageWithPromise(
           tokenId,
@@ -76,21 +84,25 @@ export function createTasksLegacy(deps) {
           type: "error",
         });
       } finally {
-        tokenStore.closeWebSocketConnection(tokenId);
-        releaseConnectionSlot();
-        addLog({
-          time: new Date().toLocaleTimeString(),
-          message: `${token.name} 连接已关闭  (队列: ${connectionQueue.active}/${batchSettings.maxActive})`,
-          type: "info",
-        });
+        if (!isScheduledTask) {
+          tokenStore.closeWebSocketConnection(tokenId);
+          releaseConnectionSlot();
+          addLog({
+            time: new Date().toLocaleTimeString(),
+            message: `${token.name} 连接已关闭  (队列: ${connectionQueue.active}/${batchSettings.maxActive})`,
+            type: "info",
+          });
+        }
       }
     });
 
     await Promise.all(taskPromises);
 
-    isRunning.value = false;
-    currentRunningTokenId.value = null;
-    message.success("批量领取功法残卷结束");
+    if (!isScheduledTask) {
+      isRunning.value = false;
+      currentRunningTokenId.value = null;
+      message.success("批量领取功法残卷结束");
+    }
   };
 
   /**
@@ -129,8 +141,10 @@ export function createTasksLegacy(deps) {
       }
     }
 
-    isRunning.value = true;
-    shouldStop.value = false;
+    if (!isScheduledTask) {
+      isRunning.value = true;
+      shouldStop.value = false;
+    }
 
     selectedTokens.value.forEach((id) => {
       tokenStatus.value[id] = "waiting";
@@ -155,7 +169,13 @@ export function createTasksLegacy(deps) {
             type: "info",
           });
 
-          await ensureConnection(tokenId);
+          if (!isScheduledTask) {
+            await ensureConnection(tokenId);
+          }
+          if (isScheduledTask && tokenStore.getWebSocketStatus(tokenId) !== "connected") {
+            addLog({ time: new Date().toLocaleTimeString(), message: `${token.name} 未连接，跳过`, type: "warning" });
+            return;
+          }
 
           const roleInfo = await tokenStore.sendGetRoleInfo(tokenId);
           const legacyFragmentCount =
@@ -313,35 +333,36 @@ export function createTasksLegacy(deps) {
             break;
           }
         } finally {
-          tokenStore.closeWebSocketConnection(tokenId);
-          releaseConnectionSlot();
-          addLog({
-            time: new Date().toLocaleTimeString(),
-            message: `${token.name} 连接已关闭  (队列: ${connectionQueue.active}/${batchSettings.maxActive})`,
-            type: "info",
-          });
+          if (!isScheduledTask) {
+            tokenStore.closeWebSocketConnection(tokenId);
+            releaseConnectionSlot();
+            addLog({
+              time: new Date().toLocaleTimeString(),
+              message: `${token.name} 连接已关闭  (队列: ${connectionQueue.active}/${batchSettings.maxActive})`,
+              type: "info",
+            });
+          }
         }
       }
     });
 
     await Promise.all(taskPromises);
 
-    isRunning.value = false;
-    currentRunningTokenId.value = null;
-
-    addLog({
+    if (!isScheduledTask) {
+      isRunning.value = false;
+      currentRunningTokenId.value = null;
+            addLog({
       time: new Date().toLocaleTimeString(),
       message: `=== 批量赠送功法残卷完成: 成功 ${totalSuccess} 个，失败 ${totalFailed} 个 ===`,
       type: "success",
-    });
-
-    message.success(
+      });
+            message.success(
       `批量赠送功法残卷结束，成功 ${totalSuccess} 个，失败 ${totalFailed} 个`,
-    );
-  };
-
-  return {
-    batchLegacyClaim,
-    batchLegacyGiftSendEnhanced,
-  };
-}
+      );
+      };
+            return {
+      batchLegacyClaim,
+      batchLegacyGiftSendEnhanced,
+      };
+      }
+    }

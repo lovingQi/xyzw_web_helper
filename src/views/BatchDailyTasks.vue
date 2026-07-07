@@ -4502,9 +4502,50 @@ const executeScheduledTask = async (task) => {
     // Always use the latest selectedTokens from the task that exist in current tokens.value
     selectedTokens.value = [...availableTokens];
 
-    // Execute selected tasks in parallel
-    const taskPromises = task.selectedTasks.map(async (taskName) => {
-      if (shouldStop.value) return;
+    // ========== 预连接所有 token ==========
+    const connectedTokenIds = [];
+    for (const tokenId of availableTokens) {
+      if (shouldStop.value) break;
+      const token = tokens.value.find((t) => t.id === tokenId);
+      try {
+        await ensureConnection(tokenId);
+        connectedTokenIds.push(tokenId);
+        addLog({
+          time: new Date().toLocaleTimeString(),
+          message: `✅ ${token?.name || tokenId} 预连接成功`,
+          type: "success",
+        });
+      } catch (e) {
+        addLog({
+          time: new Date().toLocaleTimeString(),
+          message: `❌ ${token?.name || tokenId} 预连接失败: ${e.message}，将跳过该账号`,
+          type: "error",
+        });
+      }
+      await new Promise((r) => setTimeout(r, batchSettings.connectionDelay || 500));
+    }
+
+    if (connectedTokenIds.length === 0) {
+      addLog({
+        time: new Date().toLocaleTimeString(),
+        message: `=== 没有账号连接成功，取消执行 ===`,
+        type: "error",
+      });
+      return;
+    }
+
+    // 更新 selectedTokens 为实际连接成功的
+    selectedTokens.value = [...connectedTokenIds];
+
+    addLog({
+      time: new Date().toLocaleTimeString(),
+      message: `=== ${connectedTokenIds.length} 个账号已连接，开始串行执行 ${task.selectedTasks.length} 个任务 ===`,
+      type: "info",
+    });
+
+    // ========== 串行执行所有子任务 ==========
+    for (const taskName of task.selectedTasks) {
+      if (shouldStop.value) break;
 
       if (
         ["batchbaoku45", "batchbaoku13"].includes(taskName) &&
@@ -4515,7 +4556,7 @@ const executeScheduledTask = async (task) => {
           message: `跳过任务: ${availableTasks.find((t) => t.value === taskName)?.label || taskName} (不在宝库开放时间)`,
           type: "warning",
         });
-        return;
+        continue;
       }
 
       if (
@@ -4527,7 +4568,7 @@ const executeScheduledTask = async (task) => {
           message: `跳过任务: ${availableTasks.find((t) => t.value === taskName)?.label || taskName} (不在梦境开放时间)`,
           type: "warning",
         });
-        return;
+        continue;
       }
 
       if (
@@ -4539,7 +4580,7 @@ const executeScheduledTask = async (task) => {
           message: `跳过任务: ${availableTasks.find((t) => t.value === taskName)?.label || taskName} (不在发车开放时间)`,
           type: "warning",
         });
-        return;
+        continue;
       }
 
       if (
@@ -4551,7 +4592,7 @@ const executeScheduledTask = async (task) => {
           message: `跳过任务: ${availableTasks.find((t) => t.value === taskName)?.label || taskName} (不在竞技场开放时间)`,
           type: "warning",
         });
-        return;
+        continue;
       }
 
       if (
@@ -4568,7 +4609,7 @@ const executeScheduledTask = async (task) => {
           message: `跳过任务: ${availableTasks.find((t) => t.value === taskName)?.label || taskName} (不在怪异塔开放时间)`,
           type: "warning",
         });
-        return;
+        continue;
       }
 
       addLog({
@@ -4577,23 +4618,16 @@ const executeScheduledTask = async (task) => {
         type: "info",
       });
 
-      // Call the task function dynamically
       const taskFunction = eval(taskName);
       if (typeof taskFunction === "function") {
-        // For batch operations, pass isScheduledTask = true
-        // 具体的batch任务函数内部会使用ensureConnection管理并行连接
-        if (
-          [
-            "batchOpenBox",
-            "batchOpenBoxByPoints",
-            "batchFish",
-            "batchRecruit",
-            "batchLegacyGiftSendEnhanced",
-          ].includes(taskName)
-        ) {
+        try {
           await taskFunction(true);
-        } else {
-          await taskFunction();
+        } catch (e) {
+          addLog({
+            time: new Date().toLocaleTimeString(),
+            message: `任务 ${availableTasks.find((t) => t.value === taskName)?.label || taskName} 执行出错: ${e.message}`,
+            type: "error",
+          });
         }
       } else {
         addLog({
@@ -4602,10 +4636,19 @@ const executeScheduledTask = async (task) => {
           type: "error",
         });
       }
-    });
+    }
 
-    // Wait for all tasks to complete
-    await Promise.all(taskPromises);
+    // ========== 统一断连所有 token ==========
+    for (const tokenId of connectedTokenIds) {
+      const token = tokens.value.find((t) => t.id === tokenId);
+      tokenStore.closeWebSocketConnection(tokenId);
+      releaseConnectionSlot();
+      addLog({
+        time: new Date().toLocaleTimeString(),
+        message: `${token?.name || tokenId} 连接已关闭`,
+        type: "info",
+      });
+    }
 
     addLog({
       time: new Date().toLocaleTimeString(),
@@ -5772,20 +5815,19 @@ const {
 const tasksLegacy = createTasksLegacy(createTaskDeps());
 const { batchLegacyClaim, batchLegacyGiftSendEnhanced } = tasksLegacy;
 
-const startBatch = async () => {
+const startBatch = async (isScheduledTask = false) => {
   if (selectedTokens.value.length === 0) return;
 
-  isRunning.value = true;
-  shouldStop.value = false;
-  // 不再重置logs数组，保留之前的日志
-  // logs.value = [];
+  if (!isScheduledTask) {
+    isRunning.value = true;
+    shouldStop.value = false;
+  }
 
   // Reset status
   selectedTokens.value.forEach((id) => {
     tokenStatus.value[id] = "waiting";
   });
 
-  // 并行执行任务，但通过connectionQueue限制并发连接数
   const taskPromises = selectedTokens.value.map(async (tokenId) => {
     if (shouldStop.value) return;
 
@@ -5815,20 +5857,26 @@ const startBatch = async () => {
           });
         }
 
-        await ensureConnection(tokenId);
+        if (!isScheduledTask) {
+          await ensureConnection(tokenId);
+        }
+        if (isScheduledTask && tokenStore.getWebSocketStatus(tokenId) !== "connected") {
+          addLog({
+            time: new Date().toLocaleTimeString(),
+            message: `${token.name} 未连接，跳过`,
+            type: "warning",
+          });
+          return;
+        }
 
-        // Create runner with delay settings
         const runner = new DailyTaskRunner(tokenStore, {
           commandDelay: batchSettings.commandDelay,
           taskDelay: batchSettings.taskDelay,
         });
 
-        // Run tasks
         await runner.run(tokenId, {
           onLog: (log) => addLog(log),
-          onProgress: (p) => {
-            // 每个token维护自己的进度
-          },
+          onProgress: (p) => {},
         });
 
         success = true;
@@ -5846,7 +5894,6 @@ const startBatch = async () => {
             message: `${token.name} 执行出错: ${error.message}，等待3秒后重试...`,
             type: "warning",
           });
-          // Wait for potential token refresh in store
           await new Promise((r) => setTimeout(r, 3000));
           retryCount++;
         } else {
@@ -5858,27 +5905,27 @@ const startBatch = async () => {
           });
         }
       } finally {
-        // 完成后关闭连接并释放槽位
-        tokenStore.closeWebSocketConnection(tokenId);
-        releaseConnectionSlot();
-        addLog({
-          time: new Date().toLocaleTimeString(),
-          message: `${token.name} 连接已关闭  (队列: ${connectionQueue.active}/${batchSettings.maxActive})`,
-          type: "info",
-        });
+        if (!isScheduledTask) {
+          tokenStore.closeWebSocketConnection(tokenId);
+          releaseConnectionSlot();
+          addLog({
+            time: new Date().toLocaleTimeString(),
+            message: `${token.name} 连接已关闭  (队列: ${connectionQueue.active}/${batchSettings.maxActive})`,
+            type: "info",
+          });
+        }
       }
     }
   });
 
-  // 等待所有任务完成
   await Promise.all(taskPromises);
 
-  // 等待所有任务完成后再继续
-  await new Promise((r) => setTimeout(r, 1000));
-
-  isRunning.value = false;
-  currentRunningTokenId.value = null;
-  message.success("批量任务执行结束");
+  if (!isScheduledTask) {
+    await new Promise((r) => setTimeout(r, 1000));
+    isRunning.value = false;
+    currentRunningTokenId.value = null;
+    message.success("批量任务执行结束");
+  }
 };
 
 const stopBatch = () => {

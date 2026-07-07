@@ -39,11 +39,13 @@ export function createTasksCar(deps) {
   /**
    * 智能发车
    */
-  const batchSmartSendCar = async () => {
+  const batchSmartSendCar = async (isScheduledTask = false) => {
     if (selectedTokens.value.length === 0) return;
 
-    isRunning.value = true;
-    shouldStop.value = false;
+    if (!isScheduledTask) {
+      isRunning.value = true;
+      shouldStop.value = false;
+    }
 
     selectedTokens.value.forEach((id) => {
       tokenStatus.value[id] = "waiting";
@@ -63,7 +65,13 @@ export function createTasksCar(deps) {
           type: "info",
         });
 
-        await ensureConnection(tokenId);
+        if (!isScheduledTask) {
+          await ensureConnection(tokenId);
+        }
+        if (isScheduledTask && tokenStore.getWebSocketStatus(tokenId) !== "connected") {
+          addLog({ time: new Date().toLocaleTimeString(), message: `${token.name} 未连接，跳过`, type: "warning" });
+          return;
+        }
 
         // 1. Fetch Car Info
         addLog({
@@ -104,7 +112,7 @@ export function createTasksCar(deps) {
         let sortedHelpers = [];
 
         // 封装获取护卫使用情况的方法
-        const updateHelperUsage = async () => {
+        const updateHelperUsage = async (isScheduledTask = false) => {
           try {
             const usageRes = await tokenStore.sendMessageWithPromise(
               tokenId,
@@ -399,31 +407,37 @@ export function createTasksCar(deps) {
           type: "error",
         });
       } finally {
-        tokenStore.closeWebSocketConnection(tokenId);
-        releaseConnectionSlot();
-        addLog({
-          time: new Date().toLocaleTimeString(),
-          message: `${token.name} 连接已关闭  (队列: ${connectionQueue.active}/${batchSettings.maxActive})`,
-          type: "info",
-        });
+        if (!isScheduledTask) {
+          tokenStore.closeWebSocketConnection(tokenId);
+          releaseConnectionSlot();
+          addLog({
+            time: new Date().toLocaleTimeString(),
+            message: `${token.name} 连接已关闭  (队列: ${connectionQueue.active}/${batchSettings.maxActive})`,
+            type: "info",
+          });
+        }
       }
     });
 
     await Promise.all(taskPromises);
 
-    isRunning.value = false;
-    currentRunningTokenId.value = null;
-    message.success("批量智能发车结束");
+    if (!isScheduledTask) {
+      isRunning.value = false;
+      currentRunningTokenId.value = null;
+      message.success("批量智能发车结束");
+    }
   };
 
   /**
    * 一键收车
    */
-  const batchClaimCars = async () => {
+  const batchClaimCars = async (isScheduledTask = false) => {
     if (selectedTokens.value.length === 0) return;
 
-    isRunning.value = true;
-    shouldStop.value = false;
+    if (!isScheduledTask) {
+      isRunning.value = true;
+      shouldStop.value = false;
+    }
 
     selectedTokens.value.forEach((id) => {
       tokenStatus.value[id] = "waiting";
@@ -443,7 +457,13 @@ export function createTasksCar(deps) {
           type: "info",
         });
 
-        await ensureConnection(tokenId);
+        if (!isScheduledTask) {
+          await ensureConnection(tokenId);
+        }
+        if (isScheduledTask && tokenStore.getWebSocketStatus(tokenId) !== "connected") {
+          addLog({ time: new Date().toLocaleTimeString(), message: `${token.name} 未连接，跳过`, type: "warning" });
+          return;
+        }
 
         addLog({
           time: new Date().toLocaleTimeString(),
@@ -578,21 +598,25 @@ export function createTasksCar(deps) {
           type: "error",
         });
       } finally {
-        tokenStore.closeWebSocketConnection(tokenId);
-        releaseConnectionSlot();
-        addLog({
-          time: new Date().toLocaleTimeString(),
-          message: `${token.name} 连接已关闭  (队列: ${connectionQueue.active}/${batchSettings.maxActive})`,
-          type: "info",
-        });
+        if (!isScheduledTask) {
+          tokenStore.closeWebSocketConnection(tokenId);
+          releaseConnectionSlot();
+          addLog({
+            time: new Date().toLocaleTimeString(),
+            message: `${token.name} 连接已关闭  (队列: ${connectionQueue.active}/${batchSettings.maxActive})`,
+            type: "info",
+          });
+        }
       }
     });
 
     await Promise.all(taskPromises);
 
-    isRunning.value = false;
-    currentRunningTokenId.value = null;
-    message.success("批量一键收车结束");
+    if (!isScheduledTask) {
+      isRunning.value = false;
+      currentRunningTokenId.value = null;
+      message.success("批量一键收车结束");
+    }
   };
 
   return {

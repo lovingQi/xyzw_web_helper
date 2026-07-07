@@ -29,11 +29,13 @@ export function createTasksStore(deps) {
   /**
    * 一键购买四圣碎片
    */
-  const legion_storebuygoods = async () => {
+  const legion_storebuygoods = async (isScheduledTask = false) => {
     if (selectedTokens.value.length === 0) return;
 
-    isRunning.value = true;
-    shouldStop.value = false;
+    if (!isScheduledTask) {
+      isRunning.value = true;
+      shouldStop.value = false;
+    }
 
     selectedTokens.value.forEach((id) => {
       tokenStatus.value[id] = "waiting";
@@ -53,7 +55,13 @@ export function createTasksStore(deps) {
           type: "info",
         });
 
-        await ensureConnection(tokenId);
+        if (!isScheduledTask) {
+          await ensureConnection(tokenId);
+        }
+        if (isScheduledTask && tokenStore.getWebSocketStatus(tokenId) !== "connected") {
+          addLog({ time: new Date().toLocaleTimeString(), message: `${token.name} 未连接，跳过`, type: "warning" });
+          return;
+        }
 
         addLog({
           time: new Date().toLocaleTimeString(),
@@ -107,13 +115,15 @@ export function createTasksStore(deps) {
         });
         tokenStatus.value[tokenId] = "failed";
       } finally {
-        tokenStore.closeWebSocketConnection(tokenId);
-        releaseConnectionSlot();
-        addLog({
-          time: new Date().toLocaleTimeString(),
-          message: `${token.name} 连接已关闭  (队列: ${connectionQueue.active}/${batchSettings.maxActive})`,
-          type: "info",
-        });
+        if (!isScheduledTask) {
+          tokenStore.closeWebSocketConnection(tokenId);
+          releaseConnectionSlot();
+          addLog({
+            time: new Date().toLocaleTimeString(),
+            message: `${token.name} 连接已关闭  (队列: ${connectionQueue.active}/${batchSettings.maxActive})`,
+            type: "info",
+          });
+        }
       }
     });
 
@@ -127,11 +137,13 @@ export function createTasksStore(deps) {
   /**
    * 一键购买俱乐部5皮肤币
    */
-  const legionStoreBuySkinCoins = async () => {
+  const legionStoreBuySkinCoins = async (isScheduledTask = false) => {
     if (selectedTokens.value.length === 0) return;
 
-    isRunning.value = true;
-    shouldStop.value = false;
+    if (!isScheduledTask) {
+      isRunning.value = true;
+      shouldStop.value = false;
+    }
 
     selectedTokens.value.forEach((id) => {
       tokenStatus.value[id] = "waiting";
@@ -151,7 +163,13 @@ export function createTasksStore(deps) {
           type: "info",
         });
 
-        await ensureConnection(tokenId);
+        if (!isScheduledTask) {
+          await ensureConnection(tokenId);
+        }
+        if (isScheduledTask && tokenStore.getWebSocketStatus(tokenId) !== "connected") {
+          addLog({ time: new Date().toLocaleTimeString(), message: `${token.name} 未连接，跳过`, type: "warning" });
+          return;
+        }
 
         addLog({
           time: new Date().toLocaleTimeString(),
@@ -210,13 +228,15 @@ export function createTasksStore(deps) {
         });
         tokenStatus.value[tokenId] = "failed";
       } finally {
-        tokenStore.closeWebSocketConnection(tokenId);
-        releaseConnectionSlot();
-        addLog({
-          time: new Date().toLocaleTimeString(),
-          message: `${token.name} 连接已关闭  (队列: ${connectionQueue.active}/${batchSettings.maxActive})`,
-          type: "info",
-        });
+        if (!isScheduledTask) {
+          tokenStore.closeWebSocketConnection(tokenId);
+          releaseConnectionSlot();
+          addLog({
+            time: new Date().toLocaleTimeString(),
+            message: `${token.name} 连接已关闭  (队列: ${connectionQueue.active}/${batchSettings.maxActive})`,
+            type: "info",
+          });
+        }
       }
     });
 
@@ -230,10 +250,12 @@ export function createTasksStore(deps) {
   /**
    * 免费领取珍宝阁每日奖励
    */
-  const collection_claimfreereward = async () => {
+  const collection_claimfreereward = async (isScheduledTask = false) => {
     if (selectedTokens.value.length === 0) return;
-    isRunning.value = true;
-    shouldStop.value = false;
+    if (!isScheduledTask) {
+      isRunning.value = true;
+      shouldStop.value = false;
+    }
     selectedTokens.value.forEach((id) => {
       tokenStatus.value[id] = "waiting";
     });
@@ -252,7 +274,13 @@ export function createTasksStore(deps) {
           type: "info",
         });
 
-        await ensureConnection(tokenId);
+        if (!isScheduledTask) {
+          await ensureConnection(tokenId);
+        }
+        if (isScheduledTask && tokenStore.getWebSocketStatus(tokenId) !== "connected") {
+          addLog({ time: new Date().toLocaleTimeString(), message: `${token.name} 未连接，跳过`, type: "warning" });
+          return;
+        }
 
         addLog({
           time: new Date().toLocaleTimeString(),
@@ -291,13 +319,15 @@ export function createTasksStore(deps) {
         });
         tokenStatus.value[tokenId] = "failed";
       } finally {
-        tokenStore.closeWebSocketConnection(tokenId);
-        releaseConnectionSlot();
-        addLog({
-          time: new Date().toLocaleTimeString(),
-          message: `${token.name} 连接已关闭  (队列: ${connectionQueue.active}/${batchSettings.maxActive})`,
-          type: "info",
-        });
+        if (!isScheduledTask) {
+          tokenStore.closeWebSocketConnection(tokenId);
+          releaseConnectionSlot();
+          addLog({
+            time: new Date().toLocaleTimeString(),
+            message: `${token.name} 连接已关闭  (队列: ${connectionQueue.active}/${batchSettings.maxActive})`,
+            type: "info",
+          });
+        }
       }
     });
 
@@ -311,11 +341,13 @@ export function createTasksStore(deps) {
   /**
    * 黑市一键采购
    */
-  const store_purchase = async () => {
+  const store_purchase = async (isScheduledTask = false) => {
     if (selectedTokens.value.length === 0) return;
 
-    isRunning.value = true;
-    shouldStop.value = false;
+    if (!isScheduledTask) {
+      isRunning.value = true;
+      shouldStop.value = false;
+    }
 
     selectedTokens.value.forEach((id) => {
       tokenStatus.value[id] = "waiting";
@@ -335,7 +367,13 @@ export function createTasksStore(deps) {
           type: "info",
         });
 
-        await ensureConnection(tokenId);
+        if (!isScheduledTask) {
+          await ensureConnection(tokenId);
+        }
+        if (isScheduledTask && tokenStore.getWebSocketStatus(tokenId) !== "connected") {
+          addLog({ time: new Date().toLocaleTimeString(), message: `${token.name} 未连接，跳过`, type: "warning" });
+          return;
+        }
 
         addLog({
           time: new Date().toLocaleTimeString(),
@@ -374,13 +412,15 @@ export function createTasksStore(deps) {
         });
         tokenStatus.value[tokenId] = "failed";
       } finally {
-        tokenStore.closeWebSocketConnection(tokenId);
-        releaseConnectionSlot();
-        addLog({
-          time: new Date().toLocaleTimeString(),
-          message: `${token.name} 连接已关闭  (队列: ${connectionQueue.active}/${batchSettings.maxActive})`,
-          type: "info",
-        });
+        if (!isScheduledTask) {
+          tokenStore.closeWebSocketConnection(tokenId);
+          releaseConnectionSlot();
+          addLog({
+            time: new Date().toLocaleTimeString(),
+            message: `${token.name} 连接已关闭  (队列: ${connectionQueue.active}/${batchSettings.maxActive})`,
+            type: "info",
+          });
+        }
       }
     });
 

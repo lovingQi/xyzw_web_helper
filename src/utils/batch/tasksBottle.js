@@ -28,11 +28,13 @@ export function createTasksBottle(deps) {
   /**
    * 重置罐子
    */
-  const resetBottles = async () => {
+  const resetBottles = async (isScheduledTask = false) => {
     if (selectedTokens.value.length === 0) return;
 
-    isRunning.value = true;
-    shouldStop.value = false;
+    if (!isScheduledTask) {
+      isRunning.value = true;
+      shouldStop.value = false;
+    }
 
     selectedTokens.value.forEach((id) => {
       tokenStatus.value[id] = "waiting";
@@ -46,7 +48,13 @@ export function createTasksBottle(deps) {
       const token = tokens.value.find((t) => t.id === tokenId);
 
       try {
-        await ensureConnection(tokenId);
+        if (!isScheduledTask) {
+          await ensureConnection(tokenId);
+        }
+        if (isScheduledTask && tokenStore.getWebSocketStatus(tokenId) !== "connected") {
+          addLog({ time: new Date().toLocaleTimeString(), message: `${token.name} 未连接，跳过`, type: "warning" });
+          return;
+        }
 
         addLog({
           time: new Date().toLocaleTimeString(),
@@ -54,7 +62,6 @@ export function createTasksBottle(deps) {
           type: "info",
         });
 
-        // Execute commands
         addLog({
           time: new Date().toLocaleTimeString(),
           message: `${token.name} 停止计时...`,
@@ -96,30 +103,36 @@ export function createTasksBottle(deps) {
           type: "error",
         });
       } finally {
-        tokenStore.closeWebSocketConnection(tokenId);
-        releaseConnectionSlot();
-        addLog({
-          time: new Date().toLocaleTimeString(),
-          message: `${token.name} 连接已关闭  (队列: ${connectionQueue.active}/${batchSettings.maxActive})`,
-          type: "info",
-        });
+        if (!isScheduledTask) {
+          tokenStore.closeWebSocketConnection(tokenId);
+          releaseConnectionSlot();
+          addLog({
+            time: new Date().toLocaleTimeString(),
+            message: `${token.name} 连接已关闭  (队列: ${connectionQueue.active}/${batchSettings.maxActive})`,
+            type: "info",
+          });
+        }
       }
     });
 
     await Promise.all(taskPromises);
 
-    isRunning.value = false;
-    currentRunningTokenId.value = null;
-    message.success("批量重置罐子结束");
+    if (!isScheduledTask) {
+      isRunning.value = false;
+      currentRunningTokenId.value = null;
+      message.success("批量重置罐子结束");
+    }
   };
 
   /**
    * 一键领取盐罐
    */
-  const batchlingguanzi = async () => {
+  const batchlingguanzi = async (isScheduledTask = false) => {
     if (selectedTokens.value.length === 0) return;
-    isRunning.value = true;
-    shouldStop.value = false;
+    if (!isScheduledTask) {
+      isRunning.value = true;
+      shouldStop.value = false;
+    }
 
     selectedTokens.value.forEach((id) => {
       tokenStatus.value[id] = "waiting";
@@ -135,7 +148,13 @@ export function createTasksBottle(deps) {
           message: `=== 开始一键领取盐罐: ${token.name} ===`,
           type: "info",
         });
-        await ensureConnection(tokenId);
+        if (!isScheduledTask) {
+          await ensureConnection(tokenId);
+        }
+        if (isScheduledTask && tokenStore.getWebSocketStatus(tokenId) !== "connected") {
+          addLog({ time: new Date().toLocaleTimeString(), message: `${token.name} 未连接，跳过`, type: "warning" });
+          return;
+        }
         if (shouldStop.value) return;
         await tokenStore.sendMessageWithPromise(
           tokenId,
@@ -159,20 +178,24 @@ export function createTasksBottle(deps) {
           type: "error",
         });
       } finally {
-        tokenStore.closeWebSocketConnection(tokenId);
-        releaseConnectionSlot();
-        addLog({
-          time: new Date().toLocaleTimeString(),
-          message: `${token.name} 连接已关闭  (队列: ${connectionQueue.active}/${batchSettings.maxActive})`,
-          type: "info",
-        });
+        if (!isScheduledTask) {
+          tokenStore.closeWebSocketConnection(tokenId);
+          releaseConnectionSlot();
+          addLog({
+            time: new Date().toLocaleTimeString(),
+            message: `${token.name} 连接已关闭  (队列: ${connectionQueue.active}/${batchSettings.maxActive})`,
+            type: "info",
+          });
+        }
       }
     });
 
     await Promise.all(taskPromises);
-    isRunning.value = false;
-    currentRunningTokenId.value = null;
-    message.success("批量领取盐罐结束");
+    if (!isScheduledTask) {
+      isRunning.value = false;
+      currentRunningTokenId.value = null;
+      message.success("批量领取盐罐结束");
+    }
   };
 
   return {
