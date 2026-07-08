@@ -1,0 +1,62 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: xyzw
+      POSTGRES_USER: xyzw
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-xyzw_secure_password}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U xyzw"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --maxmemory 128mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redisdata:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build: ./xyzw-backend
+    environment:
+      DATABASE_URL: postgres://xyzw:${DB_PASSWORD:-xyzw_secure_password}@postgres:5432/xyzw
+      REDIS_URL: redis://redis:6379/0
+      JWT_SECRET: ${JWT_SECRET:-change_me_in_production}
+      TOKEN_ENCRYPT_KEY: ${TOKEN_ENCRYPT_KEY:-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef}
+      NODE_ENV: production
+      PORT: 3001
+      HOST: 0.0.0.0
+      PROXY_ENABLED: "false"
+      PAYMENT_APP_ID: ${PAYMENT_APP_ID:-}
+      PAYMENT_APP_SECRET: ${PAYMENT_APP_SECRET:-}
+      PAYMENT_NOTIFY_URL: ${PAYMENT_NOTIFY_URL:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/dockerfile
+    ports:
+      - "${FRONTEND_PORT:-80}:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  redisdata:

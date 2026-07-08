@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import * as autoRoutes from "vue-router/auto-routes";
 import { useTokenStore } from '@/stores/tokenStore'
+import { useAuthStore } from '@/stores/authStore'
 import { isNowInLegionWarTime } from "@/utils/clubBattleUtils"
 
 const generatedRoutes = autoRoutes.routes ?? [];
@@ -113,14 +114,17 @@ const my_routes = [
       requiresToken: true
     }
   },
-  // 兼容旧路由，重定向到新的token管理页面
   {
     path: '/login',
-    redirect: '/tokens'
+    name: 'Login',
+    component: () => import('@/views/Auth/Login.vue'),
+    meta: { title: '登录', guest: true }
   },
   {
     path: '/register',
-    redirect: '/tokens'
+    name: 'Register',
+    component: () => import('@/views/Auth/Register.vue'),
+    meta: { title: '注册', guest: true }
   },
   {
     path: '/game-roles',
@@ -155,26 +159,33 @@ autoRoutes.handleHotUpdate?.(router);
 
 // 导航守卫
 router.beforeEach((to, from, next) => {
+  const authStore = useAuthStore()
   const tokenStore = useTokenStore()
 
   // 设置页面标题
-  document.title = to.meta.title ? `${to.meta.title} - 东方树叶 · 咸鱼助手` : '东方树叶 · 咸鱼助手'
+  document.title = to.meta.title ? `${to.meta.title} - 咸鱼助手` : '咸鱼助手'
+
+  // 未登录用户只能访问 guest 页面和首页
+  if (!authStore.isLoggedIn && !to.meta.guest && to.path !== '/') {
+    next('/login')
+    return
+  }
+
+  // 已登录用户访问 guest 页面（登录/注册）时重定向
+  if (authStore.isLoggedIn && to.meta.guest) {
+    next('/admin/dashboard')
+    return
+  }
+
   if(to.name==="LegionWar"&&!isNowInLegionWarTime()){
-  // if(to.name==="LegionWar"&&isNowInLegionWarTime()){
     next('/admin/dashboard');
     return;
   }
-  // 检查是否需要Token
-  // if (to.meta.requiresToken  && tokenStore.getWebSocketStatus(tokenStore.selectedToken.id)=="disconnected") {
-    if (to.meta.requiresToken  && !tokenStore.hasTokens) {
+
+  if (to.meta.requiresToken && !tokenStore.hasTokens) {
     next('/tokens')
-  } else if (to.path === '/' && tokenStore.hasTokens) {
-    // 首页重定向逻辑
-    if (tokenStore.selectedToken) {
-      next('/admin/dashboard')
-    } else {
-      next('/tokens')
-    }
+  } else if (to.path === '/' && authStore.isLoggedIn) {
+    next('/admin/dashboard')
   } else {
     next()
   }
