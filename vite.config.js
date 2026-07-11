@@ -1,10 +1,21 @@
 import { defineConfig } from "vite";
 import vue from "@vitejs/plugin-vue";
 import path from "path";
-  import fs from "fs";
+import fs from "fs";
 import { fileURLToPath } from "url";
+import { HttpsProxyAgent } from "https-proxy-agent";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+function createOutboundProxyAgent() {
+  const proxyUrl =
+    process.env.HTTPS_PROXY ||
+    process.env.https_proxy ||
+    process.env.HTTP_PROXY ||
+    process.env.http_proxy;
+
+  return proxyUrl ? new HttpsProxyAgent(proxyUrl) : undefined;
+}
 
 async function safeImport(moduleName, humanName) {
   try {
@@ -92,6 +103,7 @@ export default defineConfig(async () => {
     module: "vue-i18n",
     include: path.resolve(__dirname, "./src/locales/**"),
   });
+  const outboundProxyAgent = createOutboundProxyAgent();
 
   const plugins = [
     routerPlugin && { ...routerPlugin, enforce: "pre" },
@@ -143,19 +155,30 @@ export default defineConfig(async () => {
       open: true,
       host: true,
       proxy: {
-        // 微信登录接口代理
-        "/api/weixin": {
-          target: "https://open.weixin.qq.com",
+        // 本地 SaaS 后端 API 代理
+        "/api/auth": {
+          target: "http://127.0.0.1:3001",
           changeOrigin: true,
-          rewrite: (path) => path.replace(/^\/api\/weixin/, ""),
-          secure: true,
-          headers: {
-            "User-Agent":
-              "Mozilla/5.0 (Linux; Android 7.0; Mi-4c Build/NRD90M; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/53.0.2785.49 Mobile MQQBrowser/6.2 TBS/043632 Safari/537.36 MicroMessenger/6.6.1.1220(0x26060135) NetType/WIFI Language/zh_CN",
-            Accept:
-              "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-            Referer: "https://open.weixin.qq.com/",
-          },
+        },
+        "/api/tokens": {
+          target: "http://127.0.0.1:3001",
+          changeOrigin: true,
+        },
+        "/api/tasks": {
+          target: "http://127.0.0.1:3001",
+          changeOrigin: true,
+        },
+        "/api/payments": {
+          target: "http://127.0.0.1:3001",
+          changeOrigin: true,
+        },
+        "/api/subscription": {
+          target: "http://127.0.0.1:3001",
+          changeOrigin: true,
+        },
+        "/api/health": {
+          target: "http://127.0.0.1:3001",
+          changeOrigin: true,
         },
         // 微信扫码状态轮询代理
         "/api/weixin-long": {
@@ -163,10 +186,30 @@ export default defineConfig(async () => {
           changeOrigin: true,
           rewrite: (path) => path.replace(/^\/api\/weixin-long/, ""),
           secure: true,
+          agent: outboundProxyAgent,
+          timeout: 10000,
+          proxyTimeout: 10000,
           headers: {
             "User-Agent":
               "Mozilla/5.0 (Linux; Android 7.0; Mi-4c Build/NRD90M; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/53.0.2785.49 Mobile MQQBrowser/6.2 TBS/043632 Safari/537.36 MicroMessenger/6.6.1.1220(0x26060135) NetType/WIFI Language/zh_CN",
             Accept: "*/*",
+            Referer: "https://open.weixin.qq.com/",
+          },
+        },
+        // 微信登录接口代理
+        "/api/weixin": {
+          target: "https://open.weixin.qq.com",
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/api\/weixin/, ""),
+          secure: true,
+          agent: outboundProxyAgent,
+          timeout: 10000,
+          proxyTimeout: 10000,
+          headers: {
+            "User-Agent":
+              "Mozilla/5.0 (Linux; Android 7.0; Mi-4c Build/NRD90M; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/53.0.2785.49 Mobile MQQBrowser/6.2 TBS/043632 Safari/537.36 MicroMessenger/6.6.1.1220(0x26060135) NetType/WIFI Language/zh_CN",
+            Accept:
+              "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
             Referer: "https://open.weixin.qq.com/",
           },
         },
@@ -176,6 +219,9 @@ export default defineConfig(async () => {
           changeOrigin: true,
           rewrite: (path) => path.replace(/^\/api\/hortor/, ""),
           secure: true,
+          agent: outboundProxyAgent,
+          timeout: 10000,
+          proxyTimeout: 10000,
           headers: {
             "User-Agent":
               "Mozilla/5.0 (Linux; Android 12; 23117RK66C Build/V417IR; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/95.0.4638.74 Mobile Safari/537.36",

@@ -26,11 +26,14 @@ import { ref, reactive } from 'vue';
 import { useRouter } from 'vue-router';
 import { useMessage } from 'naive-ui';
 import { useAuthStore } from '@/stores/authStore';
+import { useSubscriptionStore } from '@/stores/subscriptionStore';
 
 const router = useRouter();
 const message = useMessage();
 const authStore = useAuthStore();
+const subscriptionStore = useSubscriptionStore();
 const loading = ref(false);
+const formRef = ref(null);
 
 const form = reactive({
   email: '',
@@ -38,18 +41,28 @@ const form = reactive({
 });
 
 const rules = {
-  email: [{ required: true, message: '请输入邮箱', trigger: 'blur' }],
+  email: [
+    { required: true, message: '请输入邮箱', trigger: 'blur' },
+    {
+      type: 'email',
+      message: '请输入正确的邮箱格式',
+      trigger: ['blur', 'input'],
+    },
+  ],
   password: [{ required: true, message: '请输入密码', trigger: 'blur' }],
 };
 
 async function handleLogin() {
-  if (!form.email || !form.password) {
-    message.warning('请填写邮箱和密码');
+  try {
+    await formRef.value?.validate();
+  } catch (_) {
     return;
   }
+
   loading.value = true;
   try {
     await authStore.login({ email: form.email, password: form.password });
+    await subscriptionStore.fetchCurrent().catch(() => {});
     message.success('登录成功');
     router.push('/admin/dashboard');
   } catch (error) {
@@ -70,6 +83,7 @@ async function handleLogin() {
 }
 .auth-card {
   background: var(--n-color, #fff);
+  color: #1f2937 !important;
   border-radius: 12px;
   padding: 40px;
   width: 400px;
@@ -81,14 +95,37 @@ async function handleLogin() {
   margin-bottom: 32px;
   font-size: 24px;
   font-weight: 600;
+  color: #1f2937 !important;
 }
 .auth-footer {
   text-align: center;
   margin-top: 20px;
   font-size: 14px;
+  color: #4b5563 !important;
 }
 .auth-footer a {
-  color: #667eea;
+  color: #667eea !important;
   text-decoration: none;
+}
+
+.auth-card :deep(.n-form-item-label),
+.auth-card :deep(.n-form-item-label__text) {
+  color: #374151 !important;
+}
+
+.auth-card :deep(.n-input),
+.auth-card :deep(.n-input-wrapper) {
+  background-color: #ffffff !important;
+  color: #1f2937 !important;
+}
+
+.auth-card :deep(.n-input__input),
+.auth-card :deep(.n-input__input-el) {
+  color: #1f2937 !important;
+}
+
+.auth-card :deep(.n-input__placeholder),
+.auth-card :deep(input::placeholder) {
+  color: #9ca3af !important;
 }
 </style>

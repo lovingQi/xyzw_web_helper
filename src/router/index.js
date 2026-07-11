@@ -34,6 +34,15 @@ const my_routes = [
     })
   },
   {
+    path: '/subscription',
+    name: 'Subscription',
+    component: () => import('@/views/Subscription.vue'),
+    meta: {
+      title: '订阅套餐',
+      requiresToken: false
+    }
+  },
+  {
     name: 'DefaultLayout',
     path: '/admin',
     component: () => import('@/layout/DefaultLayout.vue'),
@@ -157,6 +166,8 @@ const router = createRouter({
 // 热更新路由
 autoRoutes.handleHotUpdate?.(router);
 
+const publicPaths = new Set(['/', '/login', '/register'])
+
 // 导航守卫
 router.beforeEach((to, from, next) => {
   const authStore = useAuthStore()
@@ -165,8 +176,8 @@ router.beforeEach((to, from, next) => {
   // 设置页面标题
   document.title = to.meta.title ? `${to.meta.title} - 咸鱼助手` : '咸鱼助手'
 
-  // 未登录用户只能访问 guest 页面和首页
-  if (!authStore.isLoggedIn && !to.meta.guest && to.path !== '/') {
+  // 未登录用户只能访问公开页面；requiresToken 只表示是否需要游戏Token。
+  if (!authStore.isLoggedIn && !publicPaths.has(to.path)) {
     next('/login')
     return
   }

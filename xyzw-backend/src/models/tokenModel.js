@@ -36,6 +36,15 @@ const tokenModel = {
     return rows[0] || null;
   },
 
+  async findByHashAndUser(tokenHash, userId) {
+    const { rows } = await query(
+      `SELECT id, user_id, name, server, role_name, role_level, import_method, source_url, remark, status, last_connected_at, created_at, updated_at
+       FROM game_tokens WHERE token_hash = $1 AND user_id = $2`,
+      [tokenHash, userId]
+    );
+    return rows[0] || null;
+  },
+
   async update(id, userId, fields) {
     const sets = [];
     const values = [];

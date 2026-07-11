@@ -5,6 +5,7 @@ import { computed, ref } from "vue";
 import { g_utils, ProtoMsg } from "@/utils/bonProtocol";
 import { gameLogger, tokenLogger, wsLogger } from "@/utils/logger";
 import { XyzwWebSocketClient } from "@/utils/xyzwWebSocket";
+import { tokensApi } from "@/api/tokens";
 
 import useIndexedDB from "@/hooks/useIndexedDB";
 import { generateRandomSeed } from "@/utils/randomSeed";
@@ -14,7 +15,6 @@ import {
   scheduleAuthUserRequest,
 } from "@/utils/token";
 import { emitPlus, $emit } from "./events/index.js";
-import { isClubAllowed, loadClubWhitelist } from "@/utils/clubWhitelist";
 import router from "@/router";
 
 const { getArrayBuffer, storeArrayBuffer, deleteArrayBuffer, clearAll } =
@@ -473,17 +473,6 @@ export const useTokenStore = defineStore("tokens", () => {
           }
         }
 
-        // 俱乐部白名单校验
-        const legionId = body?.role?.legionId;
-        if (!isClubAllowed(legionId)) {
-          const roleName = body?.role?.name || "未知角色";
-          wsLogger.warn(
-            `俱乐部白名单校验未通过 [${tokenId}]: legionId=${legionId}, 角色=${roleName}`,
-          );
-          $emit.emit("club:access:denied", { tokenId, roleName, legionId });
-          closeWebSocketConnection(tokenId);
-          return;
-        }
       }
 
       emitPlus(cmd, {
@@ -1253,6 +1242,47 @@ export const useTokenStore = defineStore("tokens", () => {
     return false;
   };
 
+  const syncTokensToBackend = async () => {
+    const result = {
+      synced: 0,
+      skipped: 0,
+      failed: 0,
+      errors: [] as Array<{ name: string; message: string }>,
+    };
+
+    for (const token of gameTokens.value) {
+      if (!token?.token) {
+        result.skipped += 1;
+        continue;
+      }
+
+      try {
+        await tokensApi.addToken({
+          name: token.name || "未命名",
+          token: token.token,
+          server: token.server || "",
+          importMethod: token.importMethod || "manual",
+          sourceUrl: token.sourceUrl || null,
+          remark: token.remark || null,
+        });
+        result.synced += 1;
+      } catch (error: any) {
+        const status = error?.response?.status;
+        if (status === 409) {
+          result.synced += 1;
+          continue;
+        }
+        result.failed += 1;
+        result.errors.push({
+          name: token.name || "未命名",
+          message: error?.response?.data?.message || error?.message || "同步失败",
+        });
+      }
+    }
+
+    return result;
+  };
+
   // 连接唯一性验证和监控
   const validateConnectionUniqueness = (tokenId: string) => {
     const connections = Object.values(wsConnections.value).filter(
@@ -1420,11 +1450,6 @@ export const useTokenStore = defineStore("tokens", () => {
 
   // 初始化
   const initTokenStore = () => {
-    // 加载俱乐部白名单配置（异步，不阻塞初始化）
-    loadClubWhitelist().catch((err) => {
-      tokenLogger.warn("俱乐部白名单配置加载失败:", err);
-    });
-
     // 清理过期token
     cleanExpiredTokens();
     // 启动连接监控
@@ -1601,6 +1626,7 @@ export const useTokenStore = defineStore("tokens", () => {
     clearAllTokens,
     cleanExpiredTokens,
     upgradeTokenToPermanent,
+    syncTokensToBackend,
     initTokenStore,
 
     //游戏内发送消息方法

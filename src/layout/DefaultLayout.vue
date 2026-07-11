@@ -41,6 +41,16 @@
             <span>Token管理</span>
           </router-link>
           <router-link
+            to="/subscription"
+            class="nav-item"
+            active-class="active"
+          >
+            <n-icon>
+              <Card />
+            </n-icon>
+            <span>订阅套餐</span>
+          </router-link>
+          <router-link
             to="/admin/batch-daily-tasks"
             class="nav-item"
             active-class="active"
@@ -79,9 +89,22 @@
                 size="medium"
                 fallback-src="/icons/dongfangshuye.png"
               />
-              <span class="username">{{
-                selectedToken?.name || "未选择Token"
-              }}</span>
+              <div class="user-summary">
+                <div class="account-row">
+                  <span class="summary-label">账号</span>
+                  <strong class="account-name">{{ currentAccountName }}</strong>
+                </div>
+                <div class="token-row">
+                  <span class="summary-label">游戏Token</span>
+                  <span class="token-name">{{
+                    selectedToken?.name || "未选择Token"
+                  }}</span>
+                </div>
+                <div class="plan-row">
+                  <span class="summary-label">套餐</span>
+                  <span class="plan-name">{{ subscriptionStore.tierLabel }}</span>
+                </div>
+              </div>
               <n-icon>
                 <ChevronDown />
               </n-icon>
@@ -125,6 +148,16 @@
             <PersonCircle />
           </n-icon>
           <span>Token管理</span>
+        </router-link>
+        <router-link
+          to="/subscription"
+          class="drawer-item"
+          @click="isMobileMenuOpen = false"
+        >
+          <n-icon>
+            <Card />
+          </n-icon>
+          <span>订阅套餐</span>
         </router-link>
         <router-link
           to="/admin/daily-tasks"
@@ -186,8 +219,11 @@ import {
   selectedToken,
   selectedTokenId,
 } from "@/stores/tokenStore";
+import { useAuthStore } from "@/stores/authStore";
+import { useSubscriptionStore } from "@/stores/subscriptionStore";
 import ThemeToggle from "@/components/Common/ThemeToggle.vue";
 import {
+  Card,
   Home,
   PersonCircle,
   Cube,
@@ -201,21 +237,30 @@ import {
 
 import { useRouter } from 'vue-router'
 import { useMessage, useDialog } from 'naive-ui'
-import { ref, onMounted, onBeforeUnmount, h } from 'vue'
+import { computed, ref, onMounted, onBeforeUnmount, h } from 'vue'
 import { isNowInLegionWarTime } from '@/utils/clubBattleUtils'
 import { $emit } from '@/stores/events'
 import { CLUB_DENY_MESSAGE, CLUB_AVATAR_PATH } from '@/utils/clubWhitelist'
 
 const tokenStore = useTokenStore();
+const authStore = useAuthStore();
+const subscriptionStore = useSubscriptionStore();
 const router = useRouter();
 const message = useMessage();
 
 const isMobileMenuOpen = ref(false);
+const currentAccountName = computed(
+  () => authStore.userNickname || authStore.userEmail || "未知账号",
+);
 
 const userMenuOptions = [
   {
-    label: "清除所有Token并退出",
+    label: "退出登录",
     key: "logout",
+  },
+  {
+    label: "清除所有游戏Token",
+    key: "clearTokens",
   },
 ];
 
@@ -223,8 +268,13 @@ const userMenuOptions = [
 const handleUserAction = async (key) => {
   switch (key) {
     case "logout":
+      await authStore.logout();
+      message.success("已退出登录");
+      router.push("/login");
+      break;
+    case "clearTokens":
       await tokenStore.clearAllTokens();
-      message.success("已清除所有Token");
+      message.success("已清除所有游戏Token");
       router.push("/tokens");
       break;
   }
@@ -265,6 +315,9 @@ const handleClubAccessDenied = (data) => {
 
 onMounted(() => {
   $emit.on("club:access:denied", handleClubAccessDenied);
+  if (authStore.isLoggedIn) {
+    subscriptionStore.fetchCurrent().catch(() => {});
+  }
 });
 
 onBeforeUnmount(() => {
@@ -364,18 +417,81 @@ onBeforeUnmount(() => {
   border-radius: var(--border-radius-medium);
   cursor: pointer;
   transition: background var(--transition-fast);
+  min-width: 220px;
 
   &:hover {
     background: var(--bg-tertiary);
   }
 }
 
-.username {
+.user-summary {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.account-row,
+.token-row,
+.plan-row {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.summary-label {
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.account-name,
+.token-name,
+.plan-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-name {
   font-weight: var(--font-weight-medium);
   color: var(--text-primary);
 }
 
+.token-name {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.plan-name {
+  font-size: 12px;
+  color: var(--primary-color);
+  font-weight: var(--font-weight-medium);
+}
+
 @media (max-width: 768px) {
+  .nav-user {
+    gap: var(--spacing-sm);
+  }
+
+  .user-info {
+    min-width: 0;
+    max-width: 180px;
+    padding: var(--spacing-xs);
+  }
+
+  .summary-label {
+    display: none;
+  }
+
+  .account-name,
+  .token-name,
+  .plan-name {
+    max-width: 120px;
+  }
+
   .nav-item span {
     display: none;
   }

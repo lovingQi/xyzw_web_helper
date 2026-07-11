@@ -6,8 +6,30 @@
         <div class="header-content">
           <div class="header-top">
             <img src="/icons/dongfangshuye.png" alt="东方树叶" class="brand-logo" />
-            <!-- 主题切换按钮 -->
-            <ThemeToggle />
+            <div class="header-tools">
+              <div v-if="authStore.isLoggedIn" class="account-pill">
+                <span class="account-label">当前账号</span>
+                <strong class="account-name">{{ currentAccountName }}</strong>
+              </div>
+              <div v-if="authStore.isLoggedIn" class="plan-pill">
+                <span class="account-label">套餐</span>
+                <strong class="plan-name">{{ subscriptionStore.tierLabel }}</strong>
+                <span class="token-quota">
+                  Token {{ tokenStore.gameTokens.length }}/{{ subscriptionStore.maxTokens }}
+                </span>
+              </div>
+              <n-button
+                v-if="authStore.isLoggedIn"
+                size="small"
+                secondary
+                class="logout-button"
+                @click="handleLogout"
+              >
+                退出登录
+              </n-button>
+              <!-- 主题切换按钮 -->
+              <ThemeToggle />
+            </div>
           </div>
           <h1>东方树叶 · Token管理</h1>
         </div>
@@ -618,6 +640,8 @@ import singleBinTokenForm from "./singlebin.vue";
 import WxQrcodeForm from "./wxqrcode.vue";
 
 import { useTokenStore, selectedTokenId } from "@/stores/tokenStore";
+import { useAuthStore } from "@/stores/authStore";
+import { useSubscriptionStore } from "@/stores/subscriptionStore";
 import {
   Add,
   Copy,
@@ -634,7 +658,7 @@ import {
   TrashBin,
 } from "@vicons/ionicons5";
 import { NIcon, NAlert, useDialog, useMessage } from "naive-ui";
-import { h, onMounted, onUnmounted, reactive, ref, watch } from "vue";
+import { computed, h, onMounted, onUnmounted, reactive, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { transformToken, scheduleAuthUserRequest } from "@/utils/token";
 import { $emit } from "@/stores/events/index.ts";
@@ -655,6 +679,11 @@ const router = useRouter();
 const message = useMessage();
 const dialog = useDialog();
 const tokenStore = useTokenStore();
+const authStore = useAuthStore();
+const subscriptionStore = useSubscriptionStore();
+const currentAccountName = computed(
+  () => authStore.userNickname || authStore.userEmail || "未知账号",
+);
 
 // 限流等待状态
 const rateLimitWaiting = ref(false);
@@ -825,6 +854,12 @@ const bulkOptions = [
  */
 const openshowImportForm = () => {
   showImportForm.value = true;
+};
+
+const handleLogout = async () => {
+  await authStore.logout();
+  message.success("已退出登录");
+  router.push("/login");
 };
 
 // 刷新Token
@@ -1609,15 +1644,37 @@ const handleRateLimitWaiting = (data) => {
   rateLimitMessage.value = `Token刷新限流等待中，预计等待 ${data.waitSeconds} 秒（队列: ${data.queueSize}）`;
 };
 
+const syncLocalTokensToBackend = async () => {
+  if (!authStore.isLoggedIn || !tokenStore.gameTokens.length) {
+    return;
+  }
+
+  try {
+    const result = await tokenStore.syncTokensToBackend();
+    if (result.failed > 0) {
+      message.warning(
+        `Token已同步 ${result.synced} 个，${result.failed} 个同步失败`,
+      );
+    }
+    await subscriptionStore.fetchCurrent().catch(() => {});
+  } catch (error) {
+    console.warn("同步Token到后端失败:", error);
+  }
+};
+
 // 生命周期
 onMounted(async () => {
   tokenStore.initTokenStore();
+  if (authStore.isLoggedIn) {
+    await subscriptionStore.fetchCurrent().catch(() => {});
+  }
 
   // 监听限流等待事件
   $emit.on("token:refresh:waiting", handleRateLimitWaiting);
 
   // 处理URL参数
   await handleUrlParams();
+  await syncLocalTokensToBackend();
 
   // 如果没有token且没有URL参数，显示导入表单
   if (!tokenStore.hasTokens && !props.token && !props.api) {
@@ -1672,9 +1729,67 @@ onUnmounted(() => {
   justify-content: center;
 }
 
-.theme-toggle {
+.header-tools {
   position: absolute;
   right: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.account-pill,
+.plan-pill {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  max-width: 360px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.16);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.26);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.18);
+}
+
+.plan-pill {
+  max-width: 300px;
+}
+
+.account-label {
+  flex: 0 0 auto;
+  font-size: 12px;
+  opacity: 0.82;
+}
+
+.account-name,
+.plan-name,
+.token-quota {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.plan-name {
+  color: #ffffff;
+}
+
+.token-quota {
+  font-size: 12px;
+  font-weight: 600;
+  opacity: 0.9;
+}
+
+.logout-button {
+  color: #ffffff !important;
+  background: rgba(255, 255, 255, 0.14) !important;
+  border-color: rgba(255, 255, 255, 0.28) !important;
+}
+
+.header-tools :deep(.theme-toggle) {
   background: rgba(255, 255, 255, 0.2);
   backdrop-filter: blur(10px);
   border: 1px solid rgba(255, 255, 255, 0.3);
@@ -1700,6 +1815,24 @@ onUnmounted(() => {
   margin: 0;
   color: rgba(255, 255, 255, 0.95);
   text-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+}
+
+@media (max-width: 768px) {
+  .header-top {
+    flex-direction: column;
+    gap: var(--spacing-sm);
+  }
+
+  .header-tools {
+    position: static;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .account-pill,
+  .plan-pill {
+    max-width: min(100%, 320px);
+  }
 }
 
 .import-section {

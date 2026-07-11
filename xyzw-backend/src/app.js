@@ -30,6 +30,14 @@ function buildApp(opts = {}) {
       return;
     }
 
+    if (error.statusCode && error.statusCode >= 400 && error.statusCode < 500) {
+      reply.code(error.statusCode).send({
+        code: error.code || 'BAD_REQUEST',
+        message: error.message,
+      });
+      return;
+    }
+
     request.log.error(error);
     reply.code(500).send({
       code: 'INTERNAL_ERROR',

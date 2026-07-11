@@ -1,4 +1,5 @@
 const tokenModel = require('../models/tokenModel');
+const subscriptionService = require('./subscriptionService');
 const { encrypt, decrypt, sha256 } = require('../utils/crypto');
 const { ValidationError, ConflictError, NotFoundError, ForbiddenError } = require('../utils/errors');
 
@@ -11,6 +12,13 @@ const tokenService = {
     }
 
     const tokenHash = sha256(token);
+    const existing = await tokenModel.findByHashAndUser(tokenHash, userId);
+    if (existing) {
+      return existing;
+    }
+
+    const currentCount = await tokenModel.countByUserId(userId);
+    await subscriptionService.checkTokenLimit(userId, currentCount);
 
     try {
       const encryptedToken = encrypt(token);

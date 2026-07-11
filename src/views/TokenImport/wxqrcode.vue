@@ -317,7 +317,10 @@ const tryGetWeixinQR = async () => {
     }
 
     if (!qrUrl) {
-      throw new Error("未找到二维码图片地址");
+      const errorText =
+        doc.querySelector(".weui_msg_title, .weui-msg__title")?.textContent?.trim() ||
+        doc.body?.textContent?.replace(/\s+/g, " ").trim();
+      throw new Error(errorText || "未找到二维码图片地址");
     }
 
     // 解析 uuid
@@ -368,7 +371,7 @@ const checkScanStatus = async () => {
 
     // 使用微信官方推荐的扫码状态轮询路径
     const url =
-      "/api/weixin/connect/l/qrconnect?uuid=" +
+      "/api/weixin-long/connect/l/qrconnect?uuid=" +
       qrcodeUUID.value +
       "&f=url&_=" +
       Date.now();

@@ -3,6 +3,7 @@ const redis = require('../config/redis');
 const taskConfigModel = require('../models/taskConfigModel');
 const taskLogModel = require('../models/taskLogModel');
 const tokenModel = require('../models/tokenModel');
+const subscriptionService = require('./subscriptionService');
 const { NotFoundError, ValidationError } = require('../utils/errors');
 const { TASK_EXECUTION_QUEUE } = require('../workers/schedulerWorker');
 
@@ -29,6 +30,8 @@ const taskService = {
     if (!VALID_TASK_TYPES.includes(taskType)) {
       throw new ValidationError(`无效的任务类型: ${taskType}`);
     }
+
+    await subscriptionService.checkTaskScheduling(userId);
 
     const token = await tokenModel.findByIdAndUser(tokenId, userId);
     if (!token) {
@@ -80,6 +83,8 @@ const taskService = {
     if (!task) {
       throw new NotFoundError('任务配置不存在');
     }
+
+    await subscriptionService.checkTaskScheduling(userId);
 
     const queue = getQueue();
     const job = await queue.add('execute', {
