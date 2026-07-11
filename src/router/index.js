@@ -110,9 +110,22 @@ const my_routes = [
           requiresToken: true
         }
       },
+      {
+        path: 'task-logs',
+        name: 'TaskLogs',
+        component: () => import('@/views/TaskLogs.vue'),
+        meta: {
+          title: '任务日志',
+          requiresToken: false
+        }
+      },
       // 增加自动路由引用
       ...generatedRoutes,
     ]
+  },
+  {
+    path: '/task-logs',
+    redirect: '/admin/task-logs'
   },
   {
     path: '/websocket-test',

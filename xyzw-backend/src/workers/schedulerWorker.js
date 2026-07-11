@@ -58,10 +58,11 @@ async function scanAndEnqueue() {
       });
 
       const nextRun = calculateNextExecutionTime({
+        runType: 'cron',
         cronExpression: task.cron_expression,
         lastRunAt: new Date(),
       });
-      const nextRunAt = nextRun?.nextRun || null;
+      const nextRunAt = nextRun || null;
 
       await query(
         'UPDATE task_configs SET next_run_at = $1, last_run_at = NOW() WHERE id = $2',

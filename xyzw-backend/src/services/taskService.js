@@ -10,7 +10,11 @@ const { TASK_EXECUTION_QUEUE } = require('../workers/schedulerWorker');
 const VALID_TASK_TYPES = [
   'daily_all', 'daily_signin', 'arena', 'boss', 'tower',
   'study', 'mail', 'legion_signin', 'bottle', 'gacha',
-  'hangup', 'recruit', 'buygold',
+  'hangup', 'hangup_time', 'recruit', 'buygold',
+  'daily_share', 'friend', 'daily_reward', 'daily_point',
+  'weekly_reward', 'war_order', 'open_box', 'bottle_timer',
+  'legion_boss', 'daily_gift', 'collection', 'fishing',
+  'genie', 'black_market', 'dream',
 ];
 
 let executionQueue;
@@ -43,7 +47,7 @@ const taskService = {
       tokenId,
       taskType,
       cronExpression,
-      timeJitterMs: timeJitterMs || 300000,
+      timeJitterMs: timeJitterMs ?? 300000,
       settings,
     });
   },

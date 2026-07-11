@@ -43,7 +43,7 @@ async function executeTask(job) {
       await tokenModel.updateLastConnected(tokenId);
 
       const runner = new TaskRunner(client, settings || {});
-      return await runner.runDailyTasks();
+      return await runner.runTaskType(taskType);
     });
 
     const completedAt = new Date();
@@ -56,7 +56,12 @@ async function executeTask(job) {
           result.success ? 'success' : 'failed',
           completedAt,
           durationMs,
-          JSON.stringify({ tasksRun: result.tasksRun, tasksFailed: result.tasksFailed }),
+          JSON.stringify({
+            taskType,
+            tasksRun: result.tasksRun,
+            tasksFailed: result.tasksFailed,
+            logs: result.logs || [],
+          }),
           logId,
         ]
       );

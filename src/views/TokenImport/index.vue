@@ -149,6 +149,14 @@
               </template>
               批量功能
             </n-button>
+            <n-button secondary type="primary" @click="goToTaskLogs">
+              <template #icon>
+                <n-icon>
+                  <DocumentText />
+                </n-icon>
+              </template>
+              任务日志
+            </n-button>
 
             <n-button
               v-if="!showImportForm"
@@ -652,6 +660,7 @@ import {
   Home,
   Key,
   Menu,
+  DocumentText,
   Refresh,
   Star,
   SyncCircle,
@@ -1536,6 +1545,10 @@ const formatTime = (timestamp) => {
 
 const goToDashboard = () => {
   router.push("/admin/batch-daily-tasks");
+};
+
+const goToTaskLogs = () => {
+  router.push("/admin/task-logs");
 };
 
 // 开始任务管理 - 直接跳转到控制台

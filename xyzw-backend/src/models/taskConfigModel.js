@@ -3,8 +3,8 @@ const { calculateNextExecutionTime } = require('../utils/cronUtils');
 
 const taskConfigModel = {
   async create({ userId, tokenId, taskType, cronExpression, timeJitterMs, settings }) {
-    const nextRun = calculateNextExecutionTime({ cronExpression, lastRunAt: null });
-    const nextRunAt = nextRun?.nextRun ? new Date(nextRun.nextRun) : null;
+    const nextRun = calculateNextExecutionTime({ runType: 'cron', cronExpression, lastRunAt: null });
+    const nextRunAt = nextRun ? new Date(nextRun) : null;
 
     const { rows } = await query(
       `INSERT INTO task_configs (user_id, token_id, task_type, cron_expression, time_jitter_ms, settings, next_run_at)

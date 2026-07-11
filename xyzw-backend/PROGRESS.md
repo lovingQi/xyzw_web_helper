@@ -1,6 +1,6 @@
 # XYZW SaaS 商业化开发进度文档
 
-> 最后更新：2026-07-08
+> 最后更新：2026-07-11
 
 ## 一、项目概述
 
@@ -13,7 +13,7 @@
 | 连接架构 | 后端"按需唤醒"（连接→执行→断开，非常驻） |
 | 技术栈 | Node.js (Fastify) + PostgreSQL |
 | 任务调度 | BullMQ + Redis |
-| 代理策略 | 住宅代理 IP 池（前期测试阶段跳过） |
+| 代理策略 | 当前支持系统 HTTP/HTTPS 代理；住宅代理 IP 池待接入 |
 | 支付系统 | 第三方聚合支付 + 自建用户系统 |
 | 前端改造 | 在现有项目上增量改造 |
 
@@ -34,11 +34,11 @@
 |------|------|------|---------|
 | P1 | 后端基础设施 | ✅ 完成 | 2026-07-08 |
 | P2 | 游戏引擎迁移 | ✅ 完成 | 2026-07-08 |
-| P3 | 任务调度系统 | ✅ 完成 | 2026-07-08 |
-| P4 | 代理 IP + 健康监控 | ⏸️ 跳过代理，健康检查骨架已建 | 2026-07-08 |
-| P5 | 前端增量改造 | ✅ 核心完成 | 2026-07-08 |
-| P6 | 支付系统 | ✅ 框架完成 | 2026-07-08 |
-| P7 | 部署与测试 | ✅ 完成 | 2026-07-08 |
+| P3 | 任务调度系统 | ✅ 核心完成，真实 Token Worker 日志已验证 | 2026-07-11 |
+| P4 | 代理 IP + 健康监控 | 🟡 系统代理支持已完成，住宅代理池未接入 | 2026-07-11 |
+| P5 | 前端增量改造 | 🟡 SaaS 核心页面完成，批量任务后端化待完成 | 2026-07-11 |
+| P6 | 支付系统 | 🟡 框架 + 模拟回调完成，第三方支付待接入 | 2026-07-11 |
+| P7 | 部署与测试 | 🟡 本地验证通过，VPS/生产验证待完成 | 2026-07-11 |
 
 ---
 
@@ -123,27 +123,50 @@ All game engine modules OK!
 | 44 | Tasks 路由 | ✅ | `src/routes/tasks.js` |
 | 45 | Server 集成 Worker | ✅ | `src/server.js`（修改） |
 | 46 | 调度验证 | ✅ | 启动正常，Worker 注册成功 |
+| 46.1 | Worker 任务类型分发 | ✅ | `executionWorker.js` 调用 `runner.runTaskType(taskType)` |
+| 46.2 | 执行日志增强 | ✅ | `task_logs.result` 写入 taskType、tasksRun、tasksFailed、runner logs |
+| 46.3 | next_run_at 调度修复 | ✅ | 创建任务和 scheduler 续算均传入 cron runType |
+| 46.4 | timeJitterMs=0 支持 | ✅ | 定时验证可关闭随机抖动 |
 
 **BullMQ 队列设计**：
 - `task-scheduler`：每 60 秒 Repeatable Job，扫描到期任务
 - `task-execution`：concurrency=50, limiter=10/s, timeout=120s
 - `health-check`：每 5 分钟健康检测
 
+**2026-07-11 真实 Token 验证结果**：
+- 当前账号真实微信扫码 Token 已同步到后端 `game_tokens`，后端可查到 2 个 active Token。
+- `task_id=15` 已验证完整定时闭环：scheduler 在 2026-07-11 10:19:00 自动入队，Worker 登录真实游戏角色 `kidult`，执行 `mail_claimallattachment` 成功，`task_logs.id=14` 状态为 `success`，`next_run_at` 推进到次日。
+- `task_id=16` 再次验证完整定时闭环：scheduler 在 2026-07-11 11:04:00 自动入队，Worker 登录真实游戏角色 `kidult`，执行 `mail_claimallattachment` 成功，`task_logs.id=15` 状态为 `success`，耗时约 6.4 秒。
+- `mail` 任务已验证可定时完成：成功获取角色信息、筛选 `mail` 类型、领取邮件附件，结果为 `tasksRun=1`、`tasksFailed=0`。
+- `daily_signin` 任务可创建、可 `run-now`、Worker 可消费并写入 `task_logs`；修复失败状态传播后，命令超时会正确记录为 `failed`。
+- Worker 已修复任务类型分发：`daily_signin` 只执行签到相关动作，不再误跑竞技场、Boss、邮件、瓶子等整套日常。
+- Worker 已补齐前端同款响应映射（含 `syncrewardresp`）和协议诊断日志，失败日志会记录最近发送/收到的游戏 cmd。
+- `legion_signin` 已复测：`task_logs.id=24` 成功登录并判定当前角色未加入军团，记录为成功跳过。
+- 真实角色状态深挖：当前角色 `dailyTask.complete` 只有 `{ "1": 30 }`，`bottleHelpers.helperStopTime=0`，没有 `gacha`/`signin` 相关 `statisticsTime` 字段，`legionId=0`。
+- 状态探针结果：`activity_get`、`discount_getdiscountinfo`、`mail_getlist`、`store_goodslist` 有正常响应；`collection_goodslist`、`legion_getinfo`、`car_getrolecar`、`mergebox_getinfo` 等在当前角色状态下无业务响应。
+- `bottle` 已修复为状态跳过：`task_logs.id=26` 成功登录并判定未发现运行中的盐罐机器人，记录为成功跳过。
+- 当前仍需深挖的真实命令：`daily_signin` 的 `system_signinreward`（`task_logs.id=25`）与 `gacha_drawreward`（`task_logs.id=27`）均能登录并执行到命令发送阶段，但未收到业务响应；抓包日志显示命令发出后只收到 `system_newchatmessagenotify` 等非目标响应。
+
 ---
 
-### P4：代理 IP + 健康监控（步骤 47-51）⏸️
+### P4：代理 IP + 健康监控（步骤 47-51）🟡
 
 | # | 步骤 | 状态 | 说明 |
 |---|------|------|------|
-| 47 | proxyService | ⏸️ 跳过 | 前期测试阶段不启用代理 |
-| 48 | executionWorker 代理集成 | ⏸️ 跳过 | 同上 |
+| 47 | proxyService | 🔲 待完成 | 住宅代理服务商/API 池尚未接入 |
+| 48 | executionWorker 代理集成 | ✅ | 已支持 `HTTP_PROXY/HTTPS_PROXY` + `NO_PROXY` |
 | 49 | 健康检查 Worker | ✅ | `src/workers/healthWorker.js`（骨架） |
 | 50 | 调度器健康检查 | ✅ | schedulerWorker 已检查 protocol_healthy |
-| 51 | 代理连接验证 | ⏸️ 跳过 | 待后续添加代理服务商后实施 |
+| 51 | 代理连接验证 | ✅ | 系统代理握手游戏 WebSocket 约 200ms 成功 |
+
+**说明**：
+- 后端 `GameWsClient` 已使用 `https-proxy-agent`，外部 `wss://` 游戏连接会自动读取系统代理环境变量。
+- 当前已解决本地直连游戏 WebSocket 超时问题。
+- 尚未实现按用户/Token 分配住宅代理 IP、代理池健康检查和失败切换策略。
 
 ---
 
-### P5：前端增量改造（步骤 52-67）✅（核心完成）
+### P5：前端增量改造（步骤 52-67）🟡（SaaS 核心完成）
 
 | # | 步骤 | 状态 | 产出文件 |
 |---|------|------|---------|
@@ -157,16 +180,24 @@ All game engine modules OK!
 | 59 | Login 页面 | ✅ | `src/views/Auth/Login.vue` |
 | 60 | Register 页面 | ✅ | `src/views/Auth/Register.vue` |
 | 61 | 路由 + 认证守卫 | ✅ | `src/router/index.js`（修改） |
-| 62 | tokenStore 改造 | 🔲 待完成 | Token CRUD 改为调用后端 API |
+| 62 | tokenStore 改造 | 🟡 部分完成 | 本地 Token 已可自动同步到后端；CRUD 全后端化待重构 |
 | 63 | BatchDailyTasks 改造 | 🔲 待完成 | 任务配置改为 API 持久化 |
 | 64 | SSE Composable | ✅ | `src/composables/useSSE.js` |
-| 65 | TaskLogs 页面 | 🔲 待完成 | 任务执行日志展示 |
-| 66 | DefaultLayout 导航修改 | 🔲 待完成 | 增加订阅/日志入口 |
+| 65 | TaskLogs 页面 | ✅ | `src/views/TaskLogs.vue`，摘要、筛选、状态、耗时、失败原因、步骤时间线 |
+| 66 | DefaultLayout 导航修改 | ✅ | 已增加订阅入口和任务日志入口 |
 | 67 | Nginx 配置修改 | ✅ | `docker/nginx.conf`（修改） |
+
+**2026-07-11 新增前端验证**：
+- 登录/注册页深色主题可读性已修复。
+- `/tokens` 页面显示当前 SaaS 账号、套餐等级、Token 用量上限。
+- `/subscription` 页面已上线，可展示当前套餐与套餐卡片。
+- `/admin/task-logs` 页面已上线，可查看后端登录时间、任务类型、执行状态、耗时、失败原因和详细步骤时间线。
+- `/tokens` 页面已增加“任务日志”快捷入口。
+- 微信扫码导入 Token 已恢复可用；导入后的本地 Token 会自动同步到后端 `/api/tokens`。
 
 ---
 
-### P6：支付系统（步骤 68-77）✅（框架完成）
+### P6：支付系统（步骤 68-77）🟡（框架完成）
 
 | # | 步骤 | 状态 | 产出文件 |
 |---|------|------|---------|
@@ -177,21 +208,25 @@ All game engine modules OK!
 | 72 | Subscription Service | ✅ | `src/services/subscriptionService.js` |
 | 73 | Payments 路由 | ✅ | `src/routes/payments.js` |
 | 74 | Subscription 路由 | ✅ | `src/routes/subscription.js` |
-| 75 | Subscription 前端页面 | 🔲 待完成 | 套餐卡片 + 支付弹窗 |
-| 76 | 订阅过期定时任务 | 🔲 待完成 | 每日扫描过期订阅 |
-| 77 | 支付全流程验证 | 🔲 待完成 | 需对接第三方后测试 |
+| 75 | Subscription 前端页面 | ✅ | `src/views/Subscription.vue`，套餐卡片 + 订单弹窗 |
+| 76 | 订阅过期定时任务 | 🟡 部分完成 | `subscriptionService.expireOverdueSubscriptions()` 已有，定时触发待补 |
+| 77 | 支付全流程验证 | 🟡 模拟通过 | 本地创建订单 + notify 模拟回调 + 订阅升级已验证；第三方待接 |
+
+**说明**：
+- 当前支付仍是“模拟回调/管理员激活”框架，未接真实第三方支付二维码。
+- 已验证模拟月卡支付后，套餐升级为 `basic`，Token 上限变为 10，任务调度权限开启。
 
 ---
 
-### P7：部署与测试（步骤 78-84）✅
+### P7：部署与测试（步骤 78-84）🟡
 
 | # | 步骤 | 状态 | 产出文件 |
 |---|------|------|---------|
 | 78 | 后端 Dockerfile | ✅ | `xyzw-backend/Dockerfile` |
 | 79 | docker-compose.yml | ✅ | `docker-compose.yml` |
 | 80 | 生产环境配置 | ✅ | `.env.production.example` |
-| 81 | VPS 部署测试 | 🔲 待完成 | 需在 Vultr VPS 上验证 |
-| 82 | 全流程验证 | ✅ | 本地 API 全部通过 |
+| 81 | VPS 部署测试 | 🔲 待完成 | 需在 Vultr VPS/目标服务器上验证 |
+| 82 | 全流程验证 | 🟡 本地核心通过 | 注册、登录、订阅、Token 同步、任务创建、Worker 日志均已本地验证 |
 | 83 | 备份策略 | 🔲 待完成 | PG pg_dump 定时备份 |
 | 84 | 运维文档 | 🔲 待完成 | - |
 
@@ -275,8 +310,8 @@ xyzw-backend/
 │   │   ├── bonProtocol.js              # BON 编解码 + 加密
 │   │   ├── gameCommands.js             # 命令构造器
 │   │   ├── commandRegistry.js          # 100+ 命令注册
-│   │   ├── wsClient.js                 # Node.js WS 客户端
-│   │   ├── taskRunner.js               # 14 种日常任务
+│   │   ├── wsClient.js                 # Node.js WS 客户端 + 系统代理支持
+│   │   ├── taskRunner.js               # 日常任务执行器 + taskType 分发
 │   │   └── randomSeed.js              # 随机种子
 │   ├── models/
 │   │   ├── userModel.js
@@ -314,15 +349,24 @@ xyzw-backend/
 | `src/api/payments.js` | 支付 API |
 | `src/api/subscription.js` | 订阅 API |
 | `src/stores/authStore.js` | 认证 Pinia Store |
+| `src/stores/subscriptionStore.js` | 订阅 Pinia Store |
 | `src/views/Auth/Login.vue` | 登录页面 |
 | `src/views/Auth/Register.vue` | 注册页面 |
+| `src/views/Subscription.vue` | 订阅套餐页面 |
 | `src/composables/useSSE.js` | SSE 实时推送 |
 
 ### 修改文件
 
 | 文件 | 改动内容 |
 |------|---------|
-| `src/router/index.js` | 新增 /login、/register 路由；全局 JWT 认证守卫 |
+| `src/router/index.js` | 新增 /login、/register、/subscription 路由；全局 JWT 认证守卫 |
+| `src/layout/DefaultLayout.vue` | 顶部账号/游戏 Token 区分；新增订阅入口和套餐显示 |
+| `src/views/TokenImport/index.vue` | 显示当前账号、套餐、Token 用量；自动同步本地 Token 到后端 |
+| `src/stores/tokenStore.ts` | 解除俱乐部白名单限制；新增本地 Token 同步后端能力 |
+| `src/views/Auth/Login.vue` | 表单校验、暗色样式修复、登录后加载订阅 |
+| `src/views/Auth/Register.vue` | 表单校验、暗色样式修复、注册后加载订阅 |
+| `src/views/TokenImport/wxqrcode.vue` | 微信扫码导入链路修复 |
+| `vite.config.js` | 后端 API 代理、微信代理顺序、系统代理支持 |
 | `docker/nginx.conf` | 新增后端 API + SSE 反向代理规则 |
 
 ---
@@ -333,21 +377,21 @@ xyzw-backend/
 
 - [ ] 第三方支付对接（虎皮椒/PayJS）— 获取 appId/secret 后实现 `paymentService.createOrder` 中的 TODO
 - [ ] 生产环境密钥生成 — `openssl rand -hex 32` 生成 JWT_SECRET 和 TOKEN_ENCRYPT_KEY
-- [ ] tokenStore.ts 深度改造 — Token CRUD 切换为后端 API
-- [ ] Vultr VPS 部署 — `docker-compose up -d`
+- [ ] Vultr VPS/目标服务器部署验证 — `docker-compose up -d` 后跑通 API、前端、Worker、Redis、PostgreSQL
+- [ ] BatchDailyTasks.vue 改造 — 任务配置走后端 API 持久化
+- [ ] 逐个任务类型真实修复 — `mail` 已跑通；`bottle`、`legion_signin` 已能按当前角色状态成功跳过；`daily_signin`、`gacha` 仍需真实前端在线对照或更深抓包
 
 ### 优先级 P1（上线后一周内）
 
-- [ ] Subscription.vue 页面 — 套餐展示 + 支付二维码
-- [ ] TaskLogs.vue 页面 — 任务执行日志展示
-- [ ] DefaultLayout.vue 导航修改 — 增加"订阅"和"任务日志"入口
-- [ ] BatchDailyTasks.vue 改造 — 任务配置走后端 API
+- [ ] tokenStore.ts 深度重构 — 从“本地同步后端”升级为“后端为主、本地缓存为辅”
 - [ ] 订阅过期定时扫描 — 每日凌晨扫描过期订阅
+- [ ] 支付历史/订单状态前端展示
+- [ ] 任务失败重试与失败原因归类
 
 ### 优先级 P2（稳定运行后）
 
 - [ ] 代理 IP 服务对接 — proxyService.js 实现
-- [ ] 健康检查完善 — 用测试 Token 连接游戏服务器
+- [ ] 健康检查完善 — 用测试 Token 连接游戏服务器，并记录协议/代理状态
 - [ ] 游戏协议版本配置化 — 从 system_config 读取 clientVersion
 - [ ] PG 定时备份 — pg_dump + 对象存储
 - [ ] 监控告警 — 协议异常时邮件/Webhook 通知
@@ -376,6 +420,7 @@ xyzw-backend/
 | bcryptjs | latest | 密码哈希 |
 | jsonwebtoken | latest | JWT |
 | ws | latest | WebSocket 客户端 |
+| https-proxy-agent | latest | 后端 WebSocket 系统代理支持 |
 | lz4js | latest | BON 协议 LZ4 压缩 |
 | dotenv | latest | 环境变量 |
 | fastify-plugin | latest | 插件封装 |
@@ -388,7 +433,55 @@ xyzw-backend/
 
 ---
 
-## 十、启动命令
+## 十、当前可达成目标评估
+
+### 结论
+
+既定的 SaaS 商业化目标**可以实现**。截至 2026-07-11，已经验证“用户注册/开通订阅/导入真实 Token/后端定时登录游戏/完成至少一个预设低风险任务/写入执行日志”的核心闭环，但还不建议直接正式上线收费。
+
+### 已经具备的能力
+
+- 用户注册、登录、JWT 鉴权、刷新 Token。
+- 免费版/基础版套餐能力：免费版 2 个 Token、禁用任务调度；基础版 10 个 Token、启用任务调度。
+- Token 后端加密入库、SHA256 去重、重复同步幂等返回已有记录。
+- 前端微信扫码导入 Token、本地 Token 自动同步到后端。
+- 订阅套餐页面、当前账号/套餐/Token 用量展示。
+- 任务日志页面：用户可在 `/admin/task-logs` 查看后端登录时间、任务类型、成功/失败状态、耗时、失败原因和详细步骤。
+- 模拟支付链路：创建订单、notify 回调、订阅升级、支付历史查询。
+- 后端任务配置、run-now 入队、Worker 消费、任务日志落库。
+- Worker 已支持系统代理连接游戏 WebSocket。
+- Worker 已支持按 `taskType` 分发，`daily_signin` 不再误执行整套日常。
+- scheduler 自动触发链路已验证：到点扫描 `next_run_at`、自动入队、Worker 执行、回写 `last_run_at/last_result/next_run_at`。
+- `mail` 低风险任务已真实完成：Worker 登录游戏角色后执行领取邮件附件成功。
+
+### 暂不满足正式上线的部分
+
+- 第三方真实支付尚未接入，当前只有模拟回调/管理员激活框架。
+- BatchDailyTasks 仍以现有前端批量任务为主，尚未完全切换到后端任务配置持久化。
+- VPS/生产环境部署尚未完成端到端验证。
+- 住宅代理 IP 池尚未接入，仅支持系统级代理环境变量。
+- 多数具体任务类型尚未逐个真实跑通；当前 `mail` 已稳定成功，`bottle` 和 `legion_signin` 对当前角色状态可成功跳过，`daily_signin`、`gacha` 仍需真实前端在线对照或更深抓包。
+
+### 当前真实验证结论
+
+- 本地账号已导入 2 个真实微信扫码 Token，并同步到后端。
+- 通过模拟支付升级为基础版后，可以创建并立即执行后端任务。
+- `task_id=15` 已完成最关键端到端验证：北京时间 2026-07-11 10:19:00 由 scheduler 自动触发，Worker 登录真实角色 `kidult`，执行 `mail_claimallattachment` 成功，日志状态 `success`，耗时约 3.7 秒。
+- `task_id=16` 已完成第二次定时验证：北京时间 2026-07-11 11:04:00 由 scheduler 自动触发，Worker 登录真实角色 `kidult`，执行 `mail_claimallattachment` 成功，日志状态 `success`，耗时约 6.4 秒。
+- `daily_signin` 已成功通过代理连接游戏服务器并获取角色信息；只执行签到相关动作，没有执行竞技场、Boss、邮件、瓶子等整套日常。
+- `legion_signin` 最新验证 `task_logs.id=24`：成功获取角色信息，因当前角色未加入军团而成功跳过。
+- `bottle` 最新验证 `task_logs.id=26`：成功获取角色信息，因 `bottleHelpers.helperStopTime=0` 判定没有运行中的盐罐机器人，成功跳过。
+- 签到命令 `system_signinreward` 与免费扭蛋 `gacha_drawreward` 当前仍表现为请求超时；补齐响应映射后仍未收到目标业务响应，抓包日志显示命令发出后只收到聊天通知。
+
+### 建议上线判断
+
+- **可进入内测**：适合少量真实账号验证 Token 同步、订阅权限、`mail` 等低风险任务调度和 Worker 稳定性。
+- **不建议立即公开收费**：真实支付、生产部署、批量任务后端化和多任务类型稳定性还未达到商业化交付标准。
+- **下一步最优先**：BatchDailyTasks 后端化、接入真实支付、逐个任务类型验证并补齐超时命令的协议细节。
+
+---
+
+## 十一、启动命令
 
 ### 开发模式
 

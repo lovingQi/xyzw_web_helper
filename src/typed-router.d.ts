@@ -33,6 +33,7 @@ declare module 'vue-router/auto-routes' {
     '/Profile': RouteRecordInfo<'/Profile', '/Profile', Record<never, never>, Record<never, never>>,
     '/Register': RouteRecordInfo<'/Register', '/Register', Record<never, never>, Record<never, never>>,
     '/Subscription': RouteRecordInfo<'/Subscription', '/Subscription', Record<never, never>, Record<never, never>>,
+    '/TaskLogs': RouteRecordInfo<'/TaskLogs', '/TaskLogs', Record<never, never>, Record<never, never>>,
     '/TokenImport/': RouteRecordInfo<'/TokenImport/', '/TokenImport', Record<never, never>, Record<never, never>>,
     '/TokenImport/bin': RouteRecordInfo<'/TokenImport/bin', '/TokenImport/bin', Record<never, never>, Record<never, never>>,
     '/TokenImport/manual': RouteRecordInfo<'/TokenImport/manual', '/TokenImport/manual', Record<never, never>, Record<never, never>>,
