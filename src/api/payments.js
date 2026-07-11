@@ -1,9 +1,11 @@
 import apiClient from './client';
 
 export const paymentsApi = {
-  async createOrder({ planId, paymentMethod }) {
+  async createOrder({ planId, paymentMethod, maxTokens }) {
     const { data } = await apiClient.post('/payments/create', {
-      planId, paymentMethod,
+      planId,
+      paymentMethod,
+      maxTokens,
     });
     return data;
   },

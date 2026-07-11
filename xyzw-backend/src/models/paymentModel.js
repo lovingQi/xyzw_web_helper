@@ -1,12 +1,35 @@
 const { query } = require('../config/database');
 
 const paymentModel = {
-  async create({ userId, orderNo, amountCents, paymentMethod, subscriptionTier, subscriptionDays, expireAt }) {
+  async create({
+    userId,
+    orderNo,
+    amountCents,
+    paymentMethod,
+    subscriptionTier,
+    subscriptionDays,
+    expireAt,
+    maxTokens,
+    extraTokens,
+  }) {
     const { rows } = await query(
-      `INSERT INTO payments (user_id, order_no, amount_cents, payment_method, subscription_tier, subscription_days, expire_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `INSERT INTO payments (
+         user_id, order_no, amount_cents, payment_method, subscription_tier,
+         subscription_days, expire_at, max_tokens, extra_tokens
+       )
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        RETURNING *`,
-      [userId, orderNo, amountCents, paymentMethod, subscriptionTier, subscriptionDays, expireAt]
+      [
+        userId,
+        orderNo,
+        amountCents,
+        paymentMethod,
+        subscriptionTier,
+        subscriptionDays,
+        expireAt,
+        maxTokens,
+        extraTokens,
+      ]
     );
     return rows[0];
   },

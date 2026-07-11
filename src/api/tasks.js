@@ -7,6 +7,16 @@ export const tasksApi = {
     return data.tasks;
   },
 
+  async getDefinitions() {
+    const { data } = await apiClient.get('/tasks/definitions');
+    return data;
+  },
+
+  async getSchedulerStatus() {
+    const { data } = await apiClient.get('/tasks/scheduler-status');
+    return data;
+  },
+
   async createTask({ tokenId, taskType, cronExpression, timeJitterMs, settings }) {
     const { data } = await apiClient.post('/tasks', {
       tokenId, taskType, cronExpression, timeJitterMs, settings,
@@ -31,9 +41,10 @@ export const tasksApi = {
     return data;
   },
 
-  async getLogs({ tokenId, limit = 50, offset = 0 } = {}) {
+  async getLogs({ tokenId, taskConfigId, limit = 50, offset = 0 } = {}) {
     const params = { limit, offset };
     if (tokenId) params.tokenId = tokenId;
+    if (taskConfigId) params.taskConfigId = taskConfigId;
     const { data } = await apiClient.get('/tasks/logs', { params });
     return data;
   },

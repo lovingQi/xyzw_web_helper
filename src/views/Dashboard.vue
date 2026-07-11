@@ -125,7 +125,7 @@ const handleManageTokens = () => {
   */
 
   try {
-    router.push("/tokens");
+    router.push("/admin/tokens");
     // 降噪
   } catch (error) {
     console.error("❌ 导航失败:", error);
@@ -191,7 +191,7 @@ const formatTime = (timestamp) => {
 onMounted(async () => {
   // 确保有Token
   if (!tokenStore.hasTokens) {
-    router.push("/tokens");
+    router.push("/admin/tokens");
     return;
   }
 

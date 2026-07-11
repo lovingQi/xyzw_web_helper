@@ -118,7 +118,7 @@ const pickArenaTargetId = (targets) => {
 const handleFeatureAction = async (featureType) => {
   if (!tokenStore.selectedToken) {
     message.warning("请先选择Token");
-    router.push("/tokens");
+    router.push("/admin/tokens");
     return;
   }
 
@@ -207,7 +207,7 @@ const handleFeatureAction = async (featureType) => {
 const connectWebSocket = () => {
   if (!tokenStore.selectedToken) {
     message.warning("请先选择一个Token");
-    router.push("/tokens");
+    router.push("/admin/tokens");
     return;
   }
 
@@ -289,7 +289,7 @@ watch(
           return;
         }
         message.error("当前 Token 已过期，请重新导入后再试");
-        router.push("/tokens");
+        router.push("/admin/tokens");
       }
     }
   },

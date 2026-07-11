@@ -4,7 +4,8 @@ import { subscriptionApi } from '@/api/subscription';
 import { paymentsApi } from '@/api/payments';
 
 const PLAN_LABELS = {
-  free: '免费版',
+  free: '未开通',
+  trial: '试用版',
   basic: '基础版',
 };
 
@@ -45,8 +46,8 @@ export const useSubscriptionStore = defineStore('subscription', () => {
     }
   }
 
-  async function createOrder({ planId, paymentMethod }) {
-    return paymentsApi.createOrder({ planId, paymentMethod });
+  async function createOrder({ planId, paymentMethod, maxTokens }) {
+    return paymentsApi.createOrder({ planId, paymentMethod, maxTokens });
   }
 
   function clear() {

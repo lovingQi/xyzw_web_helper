@@ -34,14 +34,14 @@
             </n-icon>
             <span>游戏功能</span>
           </router-link>
-          <router-link to="/tokens" class="nav-item" active-class="active">
+          <router-link to="/admin/tokens" class="nav-item" active-class="active">
             <n-icon>
               <PersonCircle />
             </n-icon>
             <span>Token管理</span>
           </router-link>
           <router-link
-            to="/subscription"
+            to="/admin/subscription"
             class="nav-item"
             active-class="active"
           >
@@ -59,6 +59,16 @@
               <Layers />
             </n-icon>
             <span>批量日常</span>
+          </router-link>
+          <router-link
+            to="/admin/task-schedules"
+            class="nav-item"
+            active-class="active"
+          >
+            <n-icon>
+              <Alarm />
+            </n-icon>
+            <span>后端定时</span>
           </router-link>
           <router-link
             to="/admin/task-logs"
@@ -150,7 +160,7 @@
           <span>游戏功能</span>
         </router-link>
         <router-link
-          to="/tokens"
+          to="/admin/tokens"
           class="drawer-item"
           @click="isMobileMenuOpen = false"
         >
@@ -160,7 +170,7 @@
           <span>Token管理</span>
         </router-link>
         <router-link
-          to="/subscription"
+          to="/admin/subscription"
           class="drawer-item"
           @click="isMobileMenuOpen = false"
         >
@@ -188,6 +198,16 @@
             <Layers />
           </n-icon>
           <span>批量日常</span>
+        </router-link>
+        <router-link
+          to="/admin/task-schedules"
+          class="drawer-item"
+          @click="isMobileMenuOpen = false"
+        >
+          <n-icon>
+            <Alarm />
+          </n-icon>
+          <span>后端定时</span>
         </router-link>
         <router-link
           to="/admin/task-logs"
@@ -254,6 +274,7 @@ import {
   Menu,
   Layers,
   DocumentText,
+  Alarm,
 } from "@vicons/ionicons5";
 
 import { useRouter } from 'vue-router'
@@ -296,7 +317,7 @@ const handleUserAction = async (key) => {
     case "clearTokens":
       await tokenStore.clearAllTokens();
       message.success("已清除所有游戏Token");
-      router.push("/tokens");
+      router.push("/admin/tokens");
       break;
   }
 };

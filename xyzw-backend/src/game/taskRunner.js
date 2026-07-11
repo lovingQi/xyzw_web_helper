@@ -29,6 +29,7 @@ const getTodayBossId = () => {
 };
 
 const delay = (ms) => new Promise(r => setTimeout(r, ms));
+const { LEGACY_TASK_ALIASES } = require('./batchTaskDefinitions');
 
 class SkipTaskError extends Error {
   constructor(message) {
@@ -64,6 +65,14 @@ class TaskRunner {
       claimTaskPoints: true,
       claimWeeklyReward: true,
       claimWarOrder: true,
+      boxCount: 100,
+      fishCount: 100,
+      recruitCount: 100,
+      defaultBoxType: 2001,
+      defaultFishType: 1,
+      targetBoxPoints: 1000,
+      towerFormation: 1,
+      weirdTowerMaxClimb: 10,
       legionBossEnable: true,
       ...settings,
     };
@@ -140,16 +149,469 @@ class TaskRunner {
     try {
       const teamInfo = await this.exec('presetteam_getinfo', {}, '获取阵容信息');
       const current = teamInfo?.presetTeamInfo?.useTeamId;
+      this.log(`${formationName}: 当前阵容=${current ?? '未知'}, 目标阵容=${targetFormation}`);
       if (current === targetFormation) return false;
-      await this.exec('presetteam_saveteam', { teamId: targetFormation }, `切换到${formationName}${targetFormation}`);
+      const saveResp = await this.exec('presetteam_saveteam', { teamId: targetFormation }, `切换到${formationName}${targetFormation}`);
+      this.log(`${formationName}: 保存阵容响应=${JSON.stringify(saveResp || {})}`);
       return true;
     } catch (error) {
       try {
-        await this.exec('presetteam_saveteam', { teamId: targetFormation }, `强制切换到${formationName}${targetFormation}`);
+        const forceResp = await this.exec('presetteam_saveteam', { teamId: targetFormation }, `强制切换到${formationName}${targetFormation}`);
+        this.log(`${formationName}: 强制保存阵容响应=${JSON.stringify(forceResp || {})}`);
         return true;
       } catch (_) {
         throw error;
       }
+    }
+  }
+
+  createResult() {
+    return { success: false, tasksRun: 0, tasksFailed: 0, logs: this.logs };
+  }
+
+  async runSteps(steps, result = this.createResult()) {
+    if (!steps.length) {
+      result.error = '没有可执行的任务';
+      this.log(result.error, 'error');
+      result.logs = this.logs;
+      return result;
+    }
+
+    for (const step of steps) {
+      try {
+        await step.fn();
+        result.tasksRun++;
+      } catch (error) {
+        if (error instanceof SkipTaskError) {
+          result.tasksRun++;
+        } else {
+          result.tasksFailed++;
+          this.log(`任务[${step.name}]失败: ${error.message}`, 'error');
+        }
+      }
+      await delay(this.settings.taskDelay);
+    }
+
+    result.success = result.tasksFailed === 0;
+    if (result.tasksFailed > 0) {
+      result.error = `${result.tasksFailed} 个任务失败`;
+    }
+    result.logs = this.logs;
+    return result;
+  }
+
+  async batchOpenBox(boxType = this.settings.defaultBoxType, totalCount = this.settings.boxCount) {
+    const count = Math.max(0, Number(totalCount || 0));
+    if (!count) this.skip('开箱数量为0，跳过');
+    this.log(`批量开箱: itemId=${boxType}, count=${count}`);
+    await this.repeatByBatch(count, 10, (number, idx) =>
+      this.exec('item_openbox', { itemId: boxType, number }, `批量开箱 ${idx}/${Math.ceil(count / 10)}`, 8000)
+    );
+    await this.tolerate(() => this.exec('item_batchclaimboxpointreward', {}, '领取宝箱积分'), '领取宝箱积分');
+  }
+
+  async batchFish(fishType = this.settings.defaultFishType, totalCount = this.settings.fishCount) {
+    const count = Math.max(0, Number(totalCount || 0));
+    if (!count) this.skip('钓鱼数量为0，跳过');
+    this.log(`批量钓鱼: type=${fishType}, count=${count}`);
+    await this.repeatByBatch(count, 10, (number, idx) =>
+      this.exec('artifact_lottery', { type: fishType, lotteryNumber: number, newFree: true }, `批量钓鱼 ${idx}/${Math.ceil(count / 10)}`, 8000)
+    );
+    await this.tolerate(() => this.exec('artifact_exchange', {}, '领取钓鱼累计奖励'), '领取钓鱼累计奖励');
+  }
+
+  async batchRecruit(totalCount = this.settings.recruitCount) {
+    const count = Math.max(0, Number(totalCount || 0));
+    if (!count) this.skip('招募数量为0，跳过');
+    await this.repeatByBatch(count, 10, (number, idx) =>
+      this.exec('hero_recruit', { recruitType: 1, recruitNumber: number }, `批量招募 ${idx}/${Math.ceil(count / 10)}`, 8000)
+    );
+  }
+
+  async repeatByBatch(totalCount, batchSize, fn) {
+    const batches = Math.floor(totalCount / batchSize);
+    const remainder = totalCount % batchSize;
+    for (let i = 0; i < batches; i++) {
+      await fn(batchSize, i + 1);
+    }
+    if (remainder > 0) {
+      await fn(remainder, batches + 1);
+    }
+  }
+
+  async runBaoku(minTower, maxTower, includeBoxes) {
+    const info = await this.exec('bosstower_getinfo', {}, '获取宝库信息', 8000);
+    const towerId = Number(info?.bossTower?.towerId || info?.rawData?.bossTower?.towerId || 0);
+    if (towerId < minTower || towerId > maxTower) {
+      this.skip(`当前宝库层数 ${towerId || '未知'} 不在 ${minTower}-${maxTower} 层，跳过`);
+    }
+    for (let i = 0; i < 2; i++) {
+      await this.exec('bosstower_startboss', {}, `宝库打Boss ${i + 1}/2`, 10000);
+    }
+    if (includeBoxes) {
+      for (let i = 0; i < 9; i++) {
+        await this.exec('bosstower_startbox', {}, `宝库开箱 ${i + 1}/9`, 10000);
+      }
+    }
+  }
+
+  async runTower(maxCount = 100) {
+    await this.switchFormation(this.settings.towerFormation, '爬塔阵容');
+    await this.tolerate(() => this.exec('tower_getinfo', {}, '获取爬塔信息'), '获取爬塔信息');
+    let roleInfo = await this.tolerate(() => this.exec('role_getroleinfo', {}, '获取角色信息'), '获取角色信息');
+    let completed = 0;
+    let consecutiveFailures = 0;
+    while (completed < maxCount) {
+      try {
+        await this.exec('fight_starttower', {}, `爬塔 ${completed + 1}/${maxCount}`, 8000);
+        completed++;
+        consecutiveFailures = 0;
+      } catch (error) {
+        if (error.message?.includes('200400')) {
+          this.log('爬塔操作过快，等待5秒后重试', 'warning');
+          await delay(5000);
+          continue;
+        }
+
+        if (error.message?.includes('1500040')) {
+          this.log('上座塔奖励未领取，尝试自动领取后继续', 'warning');
+          roleInfo = roleInfo || await this.tolerate(() => this.exec('role_getroleinfo', {}, '刷新角色信息'), '刷新角色信息');
+          const towerId = roleInfo?.role?.tower?.id || roleInfo?.rawData?.role?.tower?.id;
+          const rewardFloor = Math.floor(Number(towerId || 0) / 10);
+          if (rewardFloor > 0) {
+            await this.tolerate(
+              () => this.exec('tower_claimreward', { rewardId: rewardFloor }, `领取第${rewardFloor}层爬塔奖励`, 8000),
+              `领取第${rewardFloor}层爬塔奖励`
+            );
+          } else {
+            this.log(`无法从角色信息识别奖励层数: towerId=${towerId ?? '未知'}`, 'warning');
+          }
+          await delay(3000);
+          roleInfo = await this.tolerate(() => this.exec('role_getroleinfo', {}, '刷新角色信息'), '刷新角色信息');
+          consecutiveFailures = 0;
+          continue;
+        }
+
+        if (error.message?.includes('1500020')) {
+          this.log('爬塔能量不足，正常结束', 'success');
+          break;
+        }
+
+        consecutiveFailures++;
+        if (consecutiveFailures >= 3) throw error;
+        this.log(`爬塔失败，等待2秒后重试: ${error.message}`, 'warning');
+        await delay(2000);
+      }
+    }
+    this.log(`爬塔结束，共执行 ${completed} 次`, 'success');
+  }
+
+  async runWeirdTower(maxCount = this.settings.weirdTowerMaxClimb) {
+    await this.switchFormation(this.settings.towerFormation, '怪异塔阵容');
+    await this.tolerate(() => this.exec('evotower_getinfo', {}, '获取怪异塔信息'), '获取怪异塔信息');
+    const count = Math.max(1, Number(maxCount || 10));
+    for (let i = 0; i < count; i++) {
+      await this.exec('evotower_fight', {}, `怪异塔挑战 ${i + 1}/${count}`, 12000);
+    }
+  }
+
+  async runOpenBoxByPoints() {
+    const targetPoints = Math.max(0, Number(this.settings.targetBoxPoints || 0));
+    if (!targetPoints) this.skip('目标积分为0，跳过按积分开箱');
+    const roleInfo = await this.exec('role_getroleinfo', {}, '获取箱子库存', 12000);
+    const role = roleInfo?.rawData?.role || roleInfo?.role || {};
+    const items = role.items || {};
+    const boxes = [
+      { id: 2004, points: 50, reserve: 0 },
+      { id: 2003, points: 20, reserve: 0 },
+      { id: 2002, points: 10, reserve: 0 },
+      { id: 2001, points: 1, reserve: 200 },
+    ];
+    let remaining = targetPoints;
+    for (const box of boxes) {
+      const owned = Number(items?.[box.id]?.quantity || 0);
+      const available = Math.max(owned - box.reserve, 0);
+      const need = Math.ceil(remaining / box.points);
+      const toOpen = Math.min(available, need);
+      const batchCount = Math.floor(toOpen / 10) * 10;
+      if (batchCount > 0) {
+        await this.batchOpenBox(box.id, batchCount);
+        remaining -= batchCount * box.points;
+      }
+      if (remaining <= 0) break;
+    }
+    if (remaining > 0) {
+      throw new Error(`箱子积分不足，仍缺 ${remaining}`);
+    }
+  }
+
+  async runSmartSendCar() {
+    const res = await this.exec('car_getrolecar', {}, '获取车辆信息', 12000);
+    const cars = this.normalizeCars(res?.body || res);
+    let sent = 0;
+    for (const car of cars) {
+      if (Number(car.sendAt || 0) !== 0) continue;
+      const carId = String(car.id || car.carId || '');
+      if (!carId) continue;
+      await this.exec('car_send', { carId, helperId: car.helperId ? String(car.helperId) : 0, text: '', isUpgrade: false }, `发车 ${carId}`, 12000);
+      sent++;
+    }
+    if (!sent) this.skip('没有待发车辆');
+  }
+
+  async runClaimCars() {
+    const res = await this.exec('car_getrolecar', {}, '获取车辆信息', 12000);
+    const cars = this.normalizeCars(res?.body || res);
+    let claimed = 0;
+    const now = Date.now();
+    for (const car of cars) {
+      const carId = String(car.id || car.carId || '');
+      const sendAt = Number(car.sendAt || 0);
+      if (!carId || !sendAt) continue;
+      const elapsedMs = sendAt > 1e12 ? now - sendAt : now - sendAt * 1000;
+      if (elapsedMs < 4 * 60 * 60 * 1000) continue;
+      await this.exec('car_claim', { carId }, `收车 ${carId}`, 12000);
+      claimed++;
+      await this.tolerate(() => this.exec('car_research', { researchId: 1 }, '车辆改装升级'), '车辆改装升级');
+      await this.tolerate(() => this.exec('car_claimpartconsumereward', {}, '领取车辆改装累计奖励'), '领取车辆改装累计奖励');
+    }
+    if (!claimed) this.skip('没有可收取车辆');
+  }
+
+  normalizeCars(payload) {
+    const data = payload?.roleCar || payload?.car || payload;
+    const raw = data?.cars || data?.carList || data?.list || data;
+    if (Array.isArray(raw)) return raw;
+    if (raw && typeof raw === 'object') return Object.values(raw);
+    return [];
+  }
+
+  async runBatchTaskValue(taskValue) {
+    const mapped = LEGACY_TASK_ALIASES[taskValue] || taskValue;
+    const s = this.settings;
+    const dailyTypeMap = {
+      claimHangUpRewards: 'hangup',
+      batchAddHangUpTime: 'hangup_time',
+      resetBottles: 'bottle_timer',
+      batchlingguanzi: 'bottle',
+      batchclubsign: 'legion_signin',
+      batcharenafight: 'arena',
+      store_purchase: 'black_market',
+      collection_claimfreereward: 'collection',
+      batchGenieSweep: 'genie',
+      mail: 'mail',
+      gacha: 'gacha',
+      recruit: 'recruit',
+      buygold: 'buygold',
+      daily_share: 'daily_share',
+      friend: 'friend',
+      daily_reward: 'daily_reward',
+      daily_point: 'daily_point',
+      weekly_reward: 'weekly_reward',
+      war_order: 'war_order',
+      legion_boss: 'legion_boss',
+      daily_gift: 'daily_gift',
+      boss: 'boss',
+    };
+
+    if (mapped === 'startBatch') return this.runDailyTasks();
+    if (dailyTypeMap[mapped]) {
+      this.settings = { ...this.settings, onlyTaskTypes: [dailyTypeMap[mapped]] };
+      return this.runDailyTasks();
+    }
+
+    this.logs = [];
+    const result = this.createResult();
+    const run = (name, fn) => this.runSteps([{ name, fn }], result);
+
+    switch (mapped) {
+      case 'climbTower':
+        return run('一键爬塔', () => this.runTower(Number(s.towerMaxClimb || 100)));
+      case 'climbWeirdTower':
+        return run('一键爬怪异塔', () => this.runWeirdTower());
+      case 'batchStudy':
+        return run('一键答题', () => this.runStudy());
+      case 'batchSmartSendCar':
+        return run('智能发车', () => this.runSmartSendCar());
+      case 'batchClaimCars':
+        return run('一键收车', () => this.runClaimCars());
+      case 'batchOpenBox':
+        return run('批量开箱', () => this.batchOpenBox(s.defaultBoxType, s.boxCount));
+      case 'batchOpenBoxByPoints':
+        return run('按积分开箱', () => this.runOpenBoxByPoints());
+      case 'batchClaimBoxPointReward':
+        return run('领取宝箱积分', () => this.exec('item_batchclaimboxpointreward', {}, '领取宝箱积分', 8000));
+      case 'batchFish':
+        return run('批量钓鱼', () => this.batchFish(s.defaultFishType, s.fishCount));
+      case 'batchRecruit':
+        return run('批量招募', () => this.batchRecruit(s.recruitCount));
+      case 'batchbaoku13':
+        return run('一键宝库前3层', () => this.runBaoku(1, 3, true));
+      case 'batchbaoku45':
+        return run('一键宝库4,5层', () => this.runBaoku(4, 5, false));
+      case 'batchmengjing':
+        return run('一键梦境', () => this.exec('dungeon_selecthero', { battleTeam: { 0: 107 } }, '咸王梦境', 8000));
+      case 'batchClaimFreeEnergy':
+        return run('领取怪异塔免费道具', () => this.exec('mergebox_claimfreeenergy', { actType: 1 }, '领取怪异塔免费道具', 8000));
+      case 'skinChallenge':
+        return run('一键换皮闯关', () => this.runSkinChallenge());
+      case 'legion_storebuygoods':
+        return run('购买四圣碎片', () => this.exec('legion_storebuygoods', { id: 6 }, '购买四圣碎片', 8000));
+      case 'batchLegacyClaim':
+        return run('领取功法残卷', () => this.exec('legacy_claimhangup', {}, '领取功法残卷', 8000));
+      case 'batchLegacyGiftSendEnhanced':
+        return run('赠送功法残卷', () => this.runLegacyGift());
+      case 'batchUseItems':
+        return run('使用怪异塔道具', () => this.runMergeBoxUseItems());
+      case 'batchMergeItems':
+        return run('怪异塔合成', () => this.runMergeBoxMergeItems());
+      case 'batchClaimPeachTasks':
+        return run('领取蟠桃园任务', () => this.runPeachTasks());
+      case 'batchTopUpFish':
+        return run('钓鱼补齐', () => this.batchFish(s.defaultFishType, Math.max(Number(s.monthlyFishTarget || 320) - Number(s.monthlyFishDone || 0), 0)));
+      case 'batchTopUpArena':
+        return run('竞技场补齐', () => this.runArenaTimes(Math.max(Number(s.monthlyArenaTarget || 240) - Number(s.monthlyArenaDone || 0), 0)));
+      case 'batchBuyDreamItems':
+        return run('购买梦境商品', () => this.runBuyDreamItems());
+      default:
+        result.error = `任务类型 ${taskValue} 尚未实现`;
+        this.log(result.error, 'error');
+        result.logs = this.logs;
+        return result;
+    }
+  }
+
+  async runTaskGroup(taskValues) {
+    this.logs = [];
+    const result = this.createResult();
+    const selected = Array.isArray(taskValues) ? taskValues.filter(Boolean) : [];
+    if (!selected.length) {
+      result.error = '没有选择任务';
+      this.log(result.error, 'error');
+      result.logs = this.logs;
+      return result;
+    }
+
+    for (const taskValue of selected) {
+      this.log(`开始任务: ${taskValue}`);
+      const beforeRun = result.tasksRun;
+      const beforeFailed = result.tasksFailed;
+      const subRunner = new TaskRunner(this.ws, this.settings);
+      const subResult = await subRunner.runBatchTaskValue(taskValue);
+      if (Array.isArray(subResult.logs)) {
+        this.logs.push(...subResult.logs);
+      }
+      result.tasksRun += Math.max(0, Number(subResult.tasksRun || 0));
+      result.tasksFailed += Math.max(0, Number(subResult.tasksFailed || 0));
+      if (subResult.error) this.log(`任务 ${taskValue} 结果: ${subResult.error}`, subResult.success ? 'warning' : 'error');
+      if (result.tasksRun === beforeRun && result.tasksFailed === beforeFailed) {
+        result.tasksRun++;
+      }
+      await delay(this.settings.taskDelay);
+    }
+
+    result.success = result.tasksFailed === 0;
+    if (result.tasksFailed > 0) result.error = `${result.tasksFailed} 个任务失败`;
+    result.logs = this.logs;
+    return result;
+  }
+
+  async runArenaTimes(times) {
+    const count = Math.max(0, Number(times || 0));
+    if (!count) this.skip('竞技场补齐次数为0，跳过');
+    for (let i = 0; i < count; i++) {
+      await this.settingsRunArenaOnce(`竞技场补齐 ${i + 1}/${count}`);
+    }
+  }
+
+  async runStudy() {
+    const start = await this.exec('study_startgame', {}, '开始答题', 8000);
+    const questions = start?.questions || start?.study?.questions || start?.rawData?.questions || [];
+    if (Array.isArray(questions) && questions.length) {
+      for (const question of questions) {
+        const questionId = question.id || question.questionId || question.qid;
+        const answer = question.answer || question.value || 1;
+        await this.exec('study_answer', { questionId, answer }, `答题 ${questionId || ''}`.trim(), 8000);
+      }
+    } else {
+      await this.tolerate(() => this.exec('study_answer', { answer: 1 }, '答题默认答案'), '答题默认答案');
+    }
+    await this.tolerate(() => this.exec('study_claimreward', { rewardId: 1 }, '领取答题奖励'), '领取答题奖励');
+  }
+
+  async settingsRunArenaOnce(description) {
+    await this.exec('arena_startarea', {}, `${description}: 进入竞技场`);
+    let battleVersion;
+    try {
+      const levelResp = await this.exec('fight_startlevel', {}, `${description}: 获取battleVersion`);
+      battleVersion = levelResp?.rawData?.battleVersion || levelResp?.battleVersion;
+    } catch (_) { /* ignore */ }
+    const targetResp = await this.exec('arena_getareatarget', { refresh: false }, `${description}: 获取目标`);
+    const targetId = pickArenaTargetId(targetResp?.rawData || targetResp);
+    if (!targetId) throw new Error('没有可挑战的目标');
+    const params = { targetId };
+    if (battleVersion) params.battleVersion = battleVersion;
+    await this.exec('fight_startareaarena', params, description, 10000);
+  }
+
+  async runSkinChallenge() {
+    const actId = this.settings.towerActId;
+    const params = actId ? { actId } : {};
+    const info = await this.exec('towers_getinfo', params, '获取换皮闯关信息', 8000);
+    const actualActId = actId || info?.actId || info?.towerData?.actId;
+    if (!actualActId) throw new Error('无法获取换皮闯关 actId');
+    for (let towerType = 1; towerType <= 6; towerType++) {
+      await this.tolerate(() => this.exec('towers_start', { actId: actualActId, towerType }, `换皮闯关开始 ${towerType}`, 8000), `换皮闯关开始 ${towerType}`);
+      await this.tolerate(() => this.exec('towers_fight', { actId: actualActId, towerType }, `换皮闯关战斗 ${towerType}`, 10000), `换皮闯关战斗 ${towerType}`);
+    }
+  }
+
+  async runLegacyGift() {
+    const recipientId = this.settings.recipientId || this.settings.receiverId;
+    const password = this.settings.password;
+    if (!recipientId || !password) {
+      throw new Error('赠送功法残卷需要配置 recipientId/receiverId 和 password');
+    }
+    await this.exec('role_commitpassword', { password, passwordType: 1 }, '提交安全密码', 8000);
+    const info = await this.exec('legacy_getinfo', {}, '获取功法信息', 8000);
+    const legacyMap = info?.legacy?.legacyMap || info?.legacyMap || {};
+    const legacyUIds = Object.values(legacyMap).slice(0, 10).map((item) => item.uid || item.uId || item.id).filter(Boolean);
+    if (!legacyUIds.length) this.skip('没有可赠送的功法残卷');
+    await this.exec('legacy_sendgift', { itemCnt: legacyUIds.length, legacyUIds, targetId: Number(recipientId) }, '赠送功法残卷', 10000);
+  }
+
+  async runMergeBoxUseItems() {
+    const info = await this.exec('mergebox_getinfo', { actType: 1 }, '获取怪异塔合成信息', 8000);
+    const left = Number(info?.mergeBox?.lotteryLeftCnt || info?.evoTower?.lotteryLeftCnt || this.settings.mergeBoxUseCount || 1);
+    const count = Math.min(Math.max(left, 1), Number(this.settings.maxMergeBoxUse || 50));
+    for (let i = 0; i < count; i++) {
+      await this.exec('mergebox_openbox', { actType: 1, pos: { gridX: 4, gridY: 5 } }, `使用怪异塔道具 ${i + 1}/${count}`, 8000);
+    }
+    await this.tolerate(() => this.exec('mergebox_claimcostprogress', { actType: 1 }, '领取使用累计奖励'), '领取使用累计奖励');
+  }
+
+  async runMergeBoxMergeItems() {
+    const loops = Math.max(1, Number(this.settings.mergeBoxMergeLoops || 10));
+    for (let i = 0; i < loops; i++) {
+      await this.tolerate(() => this.exec('mergebox_automergeitem', { actType: 1 }, `怪异塔自动合成 ${i + 1}/${loops}`, 10000), `怪异塔自动合成 ${i + 1}/${loops}`);
+    }
+    await this.tolerate(() => this.exec('mergebox_claimmergeprogress', { actType: 1 }, '领取合成累计奖励'), '领取合成累计奖励');
+  }
+
+  async runPeachTasks() {
+    const taskIds = this.settings.peachTaskIds || [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+    for (const taskId of taskIds) {
+      await this.tolerate(() => this.exec('legion_claimpayloadtask', { taskId }, `领取蟠桃园任务 ${taskId}`, 8000), `领取蟠桃园任务 ${taskId}`);
+    }
+    await this.tolerate(() => this.exec('legion_claimpayloadtaskprogress', {}, '领取蟠桃园进度奖励'), '领取蟠桃园进度奖励');
+  }
+
+  async runBuyDreamItems() {
+    const list = Array.isArray(this.settings.dreamPurchaseList) ? this.settings.dreamPurchaseList : [];
+    if (!list.length) throw new Error('购买梦境商品需要配置 dreamPurchaseList');
+    for (const item of list) {
+      const [id, index, pos] = String(item).split('-').map(Number);
+      await this.exec('dungeon_buymerchant', { id, index, pos: Number.isFinite(pos) ? pos : 0 }, `购买梦境商品 ${item}`, 8000);
     }
   }
 
@@ -507,30 +969,15 @@ class TaskRunner {
   }
 
   async runTaskType(taskType = 'daily_all') {
-    if (taskType === 'daily_all') {
-      return this.runDailyTasks();
+    if (taskType === 'task_group') {
+      return this.runTaskGroup(this.settings.selectedTasks);
     }
 
-    if (['tower', 'study'].includes(taskType)) {
-      return {
-        success: false,
-        tasksRun: 0,
-        tasksFailed: 0,
-        error: `任务类型 ${taskType} 尚未实现`,
-        logs: [{
-          time: new Date().toISOString(),
-          message: `任务类型 ${taskType} 尚未实现`,
-          type: 'error',
-        }],
-      };
+    if (Array.isArray(this.settings.selectedTasks) && this.settings.selectedTasks.length > 0) {
+      return this.runTaskGroup(this.settings.selectedTasks);
     }
 
-    this.settings = {
-      ...this.settings,
-      onlyTaskTypes: [taskType],
-    };
-
-    return this.runDailyTasks();
+    return this.runBatchTaskValue(taskType);
   }
 }
 

@@ -17,6 +17,17 @@ const tokenService = {
       return existing;
     }
 
+    if (name) {
+      const sameRole = await tokenModel.findByRoleAndUser({
+        userId,
+        name,
+        server: server || '',
+      });
+      if (sameRole) {
+        return sameRole;
+      }
+    }
+
     const currentCount = await tokenModel.countByUserId(userId);
     await subscriptionService.checkTokenLimit(userId, currentCount);
 
@@ -82,6 +93,10 @@ const tokenService = {
 
   async getTokenCount(userId) {
     return tokenModel.countByUserId(userId);
+  },
+
+  async cleanupDuplicates(userId) {
+    return tokenModel.cleanupDuplicateRoles(userId);
   },
 };
 

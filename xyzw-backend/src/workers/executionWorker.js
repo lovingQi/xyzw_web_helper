@@ -8,11 +8,32 @@ const { TaskRunner } = require('../game/taskRunner');
 const systemConfigModel = require('../models/systemConfigModel');
 const { TASK_EXECUTION_QUEUE } = require('./schedulerWorker');
 
+const TOKEN_LOCK_TTL_MS = 10 * 60 * 1000;
+
+async function acquireTokenLock(tokenId, jobId) {
+  const lockKey = `task-token-lock:${tokenId}`;
+  const lockValue = `${jobId || 'job'}:${process.pid}:${Date.now()}`;
+  const acquired = await redis.set(lockKey, lockValue, 'PX', TOKEN_LOCK_TTL_MS, 'NX');
+  return acquired === 'OK' ? { lockKey, lockValue } : null;
+}
+
+async function releaseTokenLock(lock) {
+  if (!lock) return;
+  const script = `
+    if redis.call("get", KEYS[1]) == ARGV[1] then
+      return redis.call("del", KEYS[1])
+    end
+    return 0
+  `;
+  await redis.eval(script, 1, lock.lockKey, lock.lockValue);
+}
+
 async function executeTask(job) {
   const { taskConfigId, userId, tokenId, taskType, settings } = job.data;
   const startedAt = new Date();
 
   let logId;
+  let tokenLock;
   try {
     const { rows } = await query(
       `INSERT INTO task_logs (task_config_id, user_id, token_id, task_type, status, started_at)
@@ -23,6 +44,11 @@ async function executeTask(job) {
   } catch (_) { /* ignore logging failures */ }
 
   try {
+    tokenLock = await acquireTokenLock(tokenId, job.id);
+    if (!tokenLock) {
+      throw new Error('同一Token已有后端任务正在执行，请稍后重试');
+    }
+
     const tokenRecord = await tokenModel.findById(tokenId);
     if (!tokenRecord || tokenRecord.user_id !== userId) {
       throw new Error('Token not found or access denied');
@@ -90,6 +116,8 @@ async function executeTask(job) {
     );
 
     throw error;
+  } finally {
+    await releaseTokenLock(tokenLock);
   }
 }
 

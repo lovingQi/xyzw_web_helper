@@ -17,8 +17,15 @@ function getExecutionQueue() {
 }
 
 async function scanAndEnqueue() {
+  await systemConfigModel.set('task_scheduler_last_scan_at', new Date().toISOString(), '任务调度器最近扫描时间');
+
   const healthy = await systemConfigModel.get('protocol_healthy');
   if (healthy === false) {
+    await systemConfigModel.set('task_scheduler_last_scan_result', {
+      status: 'skipped',
+      reason: 'protocol_unhealthy',
+      dueTasks: 0,
+    }, '任务调度器最近扫描结果');
     console.warn('[Scheduler] Protocol unhealthy, skipping scan');
     return;
   }
@@ -32,7 +39,13 @@ async function scanAndEnqueue() {
      LIMIT 200`
   );
 
-  if (dueTasks.length === 0) return;
+  if (dueTasks.length === 0) {
+    await systemConfigModel.set('task_scheduler_last_scan_result', {
+      status: 'ok',
+      dueTasks: 0,
+    }, '任务调度器最近扫描结果');
+    return;
+  }
 
   const queue = getExecutionQueue();
 
@@ -81,6 +94,10 @@ async function scanAndEnqueue() {
   }
 
   if (dueTasks.length > 0) {
+    await systemConfigModel.set('task_scheduler_last_scan_result', {
+      status: 'ok',
+      dueTasks: dueTasks.length,
+    }, '任务调度器最近扫描结果');
     console.log(`[Scheduler] Enqueued ${dueTasks.length} tasks`);
   }
 }

@@ -5,7 +5,7 @@
         <h1>订阅套餐</h1>
         <p>查看当前套餐、Token 上限和任务调度权限。</p>
       </div>
-      <router-link to="/tokens" class="back-link">返回 Token 管理</router-link>
+      <router-link to="/admin/tokens" class="back-link">返回 Token 管理</router-link>
     </section>
 
     <section class="current-band">
@@ -35,10 +35,22 @@
               <h2>{{ plan.label }}</h2>
               <span>{{ plan.days }} 天</span>
             </div>
-            <div class="price">¥{{ plan.price }}</div>
+            <div class="price">¥{{ estimatePlanAmount(plan) }}</div>
+            <div class="token-picker">
+              <span>Token 数量</span>
+              <n-input-number
+                v-model:value="selectedTokenCounts[plan.id]"
+                :min="plan.minTokens || 1"
+                :max="plan.maxTokensLimit || 50"
+                :step="1"
+                button-placement="both"
+              />
+            </div>
             <div class="plan-meta">
-              <span>{{ plan.maxTokens }} 个 Token</span>
-              <span>任务调度</span>
+              <span>基础包含 {{ plan.includedTokens || 1 }} 个 Token</span>
+              <span>额外 Token：1-2 个 ¥2/个/月，第 3 个起 ¥1/个/月</span>
+              <span>当前额外 {{ getExtraTokens(plan) }} 个 Token</span>
+              <span>任务调度已开启</span>
             </div>
             <n-button
               type="primary"
@@ -57,6 +69,8 @@
       <div v-if="createdOrder" class="order-info">
         <div><span>订单号</span><strong>{{ createdOrder.orderNo }}</strong></div>
         <div><span>套餐</span><strong>{{ createdOrder.label }}</strong></div>
+        <div><span>Token 数量</span><strong>{{ createdOrder.maxTokens }} 个</strong></div>
+        <div><span>额外 Token</span><strong>{{ createdOrder.extraTokens }} 个</strong></div>
         <div><span>金额</span><strong>¥{{ createdOrder.amount }}</strong></div>
         <n-alert type="info" :bordered="false">
           {{ createdOrder.message || "请根据支付页面完成付款。" }}
@@ -76,18 +90,41 @@ const subscriptionStore = useSubscriptionStore();
 const creatingPlanId = ref('');
 const showOrderModal = ref(false);
 const createdOrder = ref(null);
+const selectedTokenCounts = ref({});
 
 const expiresText = computed(() => {
   if (!subscriptionStore.expiresAt) return '无';
   return new Date(subscriptionStore.expiresAt).toLocaleString();
 });
 
+function calculateExtraMonthlyPrice(extraTokens) {
+  if (extraTokens <= 0) return 0;
+  if (extraTokens <= 2) return extraTokens * 2;
+  return 4 + (extraTokens - 2);
+}
+
+function getSelectedTokens(plan) {
+  return selectedTokenCounts.value[plan.id] || plan.includedTokens || 1;
+}
+
+function getExtraTokens(plan) {
+  return Math.max(getSelectedTokens(plan) - (plan.includedTokens || 1), 0);
+}
+
+function estimatePlanAmount(plan) {
+  const baseMonthlyPrice = plan.pricingRules?.baseMonthlyPrice || 5;
+  const monthlyPrice = baseMonthlyPrice + calculateExtraMonthlyPrice(getExtraTokens(plan));
+  return Math.round(monthlyPrice * (plan.months || 1) * (plan.discount || 1));
+}
+
 async function createOrder(planId) {
+  const plan = subscriptionStore.plans.find(item => item.id === planId);
   creatingPlanId.value = planId;
   try {
     createdOrder.value = await subscriptionStore.createOrder({
       planId,
       paymentMethod: 'wechat',
+      maxTokens: plan ? getSelectedTokens(plan) : 1,
     });
     showOrderModal.value = true;
     message.success('订单已创建');
@@ -103,6 +140,9 @@ onMounted(async () => {
     subscriptionStore.fetchCurrent(),
     subscriptionStore.fetchPlans(),
   ]);
+  subscriptionStore.plans.forEach((plan) => {
+    selectedTokenCounts.value[plan.id] = plan.includedTokens || 1;
+  });
 });
 </script>
 
@@ -207,6 +247,19 @@ onMounted(async () => {
   margin: 20px 0;
   font-size: 34px;
   font-weight: 700;
+}
+
+.token-picker {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.token-picker span {
+  color: var(--text-secondary);
+  font-size: 13px;
 }
 
 .plan-meta {

@@ -2,7 +2,7 @@ const subscriptionModel = require('../models/subscriptionModel');
 const { ForbiddenError } = require('../utils/errors');
 
 const FREE_LIMITS = {
-  maxTokens: 2,
+  maxTokens: 0,
   taskScheduling: false,
 };
 
@@ -20,7 +20,7 @@ const subscriptionService = {
     return {
       tier: sub.tier,
       maxTokens: sub.max_tokens,
-      taskScheduling: true,
+      taskScheduling: ['trial', 'basic'].includes(sub.tier),
       expiresAt: sub.expires_at,
       startsAt: sub.starts_at,
     };

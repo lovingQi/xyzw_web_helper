@@ -17,36 +17,36 @@ const my_routes = [
     }
   },
   {
-    path: '/tokens',
-    name: 'TokenImport',
-    component: () => import('@/views/TokenImport/index.vue'),
-    meta: {
-      title: 'Token管理',
-      requiresToken: false
-    },
-    props: route => ({
-      token: route.query.token,
-      name: route.query.name,
-      server: route.query.server,
-      wsUrl: route.query.wsUrl,
-      api: route.query.api,
-      auto: route.query.auto === 'true'
-    })
-  },
-  {
-    path: '/subscription',
-    name: 'Subscription',
-    component: () => import('@/views/Subscription.vue'),
-    meta: {
-      title: '订阅套餐',
-      requiresToken: false
-    }
-  },
-  {
     name: 'DefaultLayout',
     path: '/admin',
     component: () => import('@/layout/DefaultLayout.vue'),
     children: [
+      {
+        path: 'tokens',
+        name: 'TokenImport',
+        component: () => import('@/views/TokenImport/index.vue'),
+        meta: {
+          title: 'Token管理',
+          requiresToken: false
+        },
+        props: route => ({
+          token: route.query.token,
+          name: route.query.name,
+          server: route.query.server,
+          wsUrl: route.query.wsUrl,
+          api: route.query.api,
+          auto: route.query.auto === 'true'
+        })
+      },
+      {
+        path: 'subscription',
+        name: 'Subscription',
+        component: () => import('@/views/Subscription.vue'),
+        meta: {
+          title: '订阅套餐',
+          requiresToken: false
+        }
+      },
       {
         path: 'dashboard',
         name: 'Dashboard',
@@ -119,6 +119,15 @@ const my_routes = [
           requiresToken: false
         }
       },
+      {
+        path: 'task-schedules',
+        name: 'TaskSchedules',
+        component: () => import('@/views/TaskSchedules.vue'),
+        meta: {
+          title: '后端定时',
+          requiresToken: false
+        }
+      },
       // 增加自动路由引用
       ...generatedRoutes,
     ]
@@ -126,6 +135,10 @@ const my_routes = [
   {
     path: '/task-logs',
     redirect: '/admin/task-logs'
+  },
+  {
+    path: '/task-schedules',
+    redirect: '/admin/task-schedules'
   },
   {
     path: '/websocket-test',
@@ -150,7 +163,7 @@ const my_routes = [
   },
   {
     path: '/game-roles',
-    redirect: '/tokens'
+    redirect: '/admin/tokens'
   },
   // 增加自动路由引用
   ...generatedRoutes,
@@ -207,7 +220,7 @@ router.beforeEach((to, from, next) => {
   }
 
   if (to.meta.requiresToken && !tokenStore.hasTokens) {
-    next('/tokens')
+    next('/admin/tokens')
   } else if (to.path === '/' && authStore.isLoggedIn) {
     next('/admin/dashboard')
   } else {

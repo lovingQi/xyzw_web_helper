@@ -2,20 +2,16 @@ const { Queue } = require('bullmq');
 const redis = require('../config/redis');
 const taskConfigModel = require('../models/taskConfigModel');
 const taskLogModel = require('../models/taskLogModel');
+const systemConfigModel = require('../models/systemConfigModel');
 const tokenModel = require('../models/tokenModel');
 const subscriptionService = require('./subscriptionService');
 const { NotFoundError, ValidationError } = require('../utils/errors');
 const { TASK_EXECUTION_QUEUE } = require('../workers/schedulerWorker');
-
-const VALID_TASK_TYPES = [
-  'daily_all', 'daily_signin', 'arena', 'boss', 'tower',
-  'study', 'mail', 'legion_signin', 'bottle', 'gacha',
-  'hangup', 'hangup_time', 'recruit', 'buygold',
-  'daily_share', 'friend', 'daily_reward', 'daily_point',
-  'weekly_reward', 'war_order', 'open_box', 'bottle_timer',
-  'legion_boss', 'daily_gift', 'collection', 'fishing',
-  'genie', 'black_market', 'dream',
-];
+const {
+  BATCH_TASKS,
+  TASK_GROUPS,
+  isValidTaskType,
+} = require('../game/batchTaskDefinitions');
 
 let executionQueue;
 function getQueue() {
@@ -31,7 +27,7 @@ const taskService = {
       throw new ValidationError('tokenId, taskType, cronExpression 是必填项');
     }
 
-    if (!VALID_TASK_TYPES.includes(taskType)) {
+    if (!isValidTaskType(taskType)) {
       throw new ValidationError(`无效的任务类型: ${taskType}`);
     }
 
@@ -106,12 +102,34 @@ const taskService = {
     return { jobId: job.id };
   },
 
-  async getLogs(userId, { tokenId, limit, offset } = {}) {
+  async getLogs(userId, { tokenId, taskConfigId, limit, offset } = {}) {
     if (tokenId) {
-      const logs = await taskLogModel.findByTokenId(tokenId, userId, { limit, offset });
+      const logs = await taskLogModel.findByTokenId(tokenId, userId, { limit, offset, taskConfigId });
       return { logs, total: logs.length };
     }
-    return taskLogModel.findByUserId(userId, { limit, offset });
+    return taskLogModel.findByUserId(userId, { limit, offset, taskConfigId });
+  },
+
+  getDefinitions() {
+    return {
+      taskTypes: BATCH_TASKS,
+      groups: TASK_GROUPS,
+    };
+  },
+
+  async getSchedulerStatus() {
+    const [lastScanAt, lastScanResult, protocolHealthy] = await Promise.all([
+      systemConfigModel.get('task_scheduler_last_scan_at'),
+      systemConfigModel.get('task_scheduler_last_scan_result'),
+      systemConfigModel.get('protocol_healthy'),
+    ]);
+
+    return {
+      enabled: process.env.ENABLE_WORKERS !== 'false',
+      protocolHealthy,
+      lastScanAt,
+      lastScanResult,
+    };
   },
 };
 

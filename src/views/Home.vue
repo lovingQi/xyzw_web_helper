@@ -86,7 +86,7 @@
           <span>游戏功能</span>
         </router-link>
         <router-link
-          to="/tokens"
+          to="/admin/tokens"
           class="drawer-item"
           @click="isMobileMenuOpen = false"
         >

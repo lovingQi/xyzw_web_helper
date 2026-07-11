@@ -9,6 +9,14 @@ async function taskRoutes(fastify) {
     return { tasks };
   });
 
+  fastify.get('/api/tasks/definitions', async () => {
+    return taskService.getDefinitions();
+  });
+
+  fastify.get('/api/tasks/scheduler-status', async () => {
+    return taskService.getSchedulerStatus();
+  });
+
   fastify.post('/api/tasks', async (request, reply) => {
     const { tokenId, taskType, cronExpression, timeJitterMs, settings } = request.body || {};
     const task = await taskService.createTask(request.user.id, {
@@ -44,9 +52,10 @@ async function taskRoutes(fastify) {
   });
 
   fastify.get('/api/tasks/logs', async (request) => {
-    const { tokenId, limit = 50, offset = 0 } = request.query;
+    const { tokenId, taskConfigId, limit = 50, offset = 0 } = request.query;
     return taskService.getLogs(request.user.id, {
       tokenId: tokenId ? parseInt(tokenId, 10) : null,
+      taskConfigId: taskConfigId ? parseInt(taskConfigId, 10) : null,
       limit: parseInt(limit, 10),
       offset: parseInt(offset, 10),
     });

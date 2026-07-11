@@ -92,6 +92,14 @@
             <div v-if="failureReason(log)" class="error-line">
               {{ failureReason(log) }}
             </div>
+            <div class="result-line">
+              {{ resultSummary(log) }}
+            </div>
+            <ul v-if="errorSteps(log).length" class="error-summary">
+              <li v-for="(step, index) in errorSteps(log).slice(0, 3)" :key="`${log.id}-error-${index}`">
+                {{ step.message }}
+              </li>
+            </ul>
           </div>
           <n-button text type="primary" @click="toggleExpand(log.id)">
             {{ expandedIds.has(log.id) ? "收起详情" : "展开详情" }}
@@ -137,11 +145,13 @@
 
 <script setup>
 import { computed, onMounted, reactive, ref } from "vue";
+import { useRoute } from "vue-router";
 import { useMessage } from "naive-ui";
 import { tasksApi } from "@/api/tasks";
 import { tokensApi } from "@/api/tokens";
 
 const message = useMessage();
+const route = useRoute();
 const loading = ref(false);
 const error = ref("");
 const logs = ref([]);
@@ -150,11 +160,15 @@ const tokens = ref([]);
 const expandedIds = ref(new Set());
 const filters = reactive({
   tokenId: null,
+  taskConfigId: null,
   taskType: null,
   status: null,
 });
 
 const taskTypeOptions = [
+  { label: "任务组", value: "task_group" },
+  { label: "批量日常", value: "startBatch" },
+  { label: "一键爬塔", value: "climbTower" },
   { label: "邮件附件", value: "mail" },
   { label: "每日签到", value: "daily_signin" },
   { label: "军团签到", value: "legion_signin" },
@@ -191,8 +205,24 @@ const statusOptions = [
   { label: "等待中", value: "pending" },
 ];
 
+const uniqueTokens = computed(() => {
+  const map = new Map();
+  tokens.value.forEach((token) => {
+    const key = `${token.name || ""}::${token.server || ""}`;
+    const current = map.get(key);
+    const tokenTime = new Date(token.last_connected_at || token.created_at || 0).getTime();
+    const currentTime = current
+      ? new Date(current.last_connected_at || current.created_at || 0).getTime()
+      : -1;
+    if (!current || tokenTime >= currentTime) {
+      map.set(key, token);
+    }
+  });
+  return Array.from(map.values());
+});
+
 const tokenOptions = computed(() =>
-  tokens.value.map((token) => ({
+  uniqueTokens.value.map((token) => ({
     label: [token.name, token.server].filter(Boolean).join(" · "),
     value: token.id,
   })),
@@ -239,6 +269,7 @@ const loadLogs = async () => {
   try {
     const response = await tasksApi.getLogs({
       tokenId: filters.tokenId,
+      taskConfigId: filters.taskConfigId,
       limit: 100,
       offset: 0,
     });
@@ -260,6 +291,7 @@ const handleTokenChange = () => {
 
 const resetFilters = () => {
   filters.tokenId = null;
+  filters.taskConfigId = null;
   filters.taskType = null;
   filters.status = null;
   expandedIds.value = new Set();
@@ -297,7 +329,8 @@ const statusType = (status) => {
 
 const formatDate = (value) => {
   if (!value) return "-";
-  return new Intl.DateTimeFormat("zh-CN", {
+  const formatted = new Intl.DateTimeFormat("zh-CN", {
+    year: "numeric",
     month: "2-digit",
     day: "2-digit",
     hour: "2-digit",
@@ -305,6 +338,7 @@ const formatDate = (value) => {
     second: "2-digit",
     hour12: false,
   }).format(new Date(value));
+  return `${formatted} UTC+8`;
 };
 
 const formatTime = (value) => {
@@ -328,6 +362,8 @@ const stepLogs = (log) => {
   const result = typeof log.result === "string" ? safeJsonParse(log.result) : log.result;
   return Array.isArray(result?.logs) ? result.logs : [];
 };
+
+const errorSteps = (log) => stepLogs(log).filter((step) => step.type === "error");
 
 const resultSummary = (log) => {
   const result = typeof log.result === "string" ? safeJsonParse(log.result) : log.result;
@@ -359,6 +395,10 @@ const safeJsonParse = (value) => {
 };
 
 onMounted(async () => {
+  filters.tokenId = route.query.tokenId ? Number(route.query.tokenId) : null;
+  filters.taskConfigId = route.query.taskConfigId ? Number(route.query.taskConfigId) : null;
+  filters.taskType = route.query.taskType ? String(route.query.taskType) : null;
+  filters.status = route.query.status ? String(route.query.status) : null;
   await loadTokens();
   await loadLogs();
 });
@@ -504,6 +544,25 @@ onMounted(async () => {
   margin-top: 10px;
   color: var(--error-color, #d03050);
   font-size: 13px;
+}
+
+.result-line {
+  margin-top: 8px;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.error-summary {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  color: var(--error-color, #d03050);
+  font-size: 12px;
+  line-height: 1.5;
+
+  li + li {
+    margin-top: 4px;
+  }
 }
 
 .log-detail {

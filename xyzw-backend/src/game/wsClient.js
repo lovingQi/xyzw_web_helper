@@ -1,7 +1,7 @@
 const WebSocket = require('ws');
 const { HttpsProxyAgent } = require('https-proxy-agent');
 const { g_utils, getEnc } = require('./bonProtocol');
-const { CommandRegistry, registerDefaultCommands } = require('./commandRegistry');
+const { CommandRegistry, registerDefaultCommands, errorCodeMap } = require('./commandRegistry');
 
 function getProxyUrl(targetUrl) {
   const protocol = targetUrl.protocol.replace(':', '').toLowerCase();
@@ -179,6 +179,22 @@ function getMappedCommandKeys(respCmdKey) {
   ]);
 }
 
+function getMessageField(message, field) {
+  return message?.[field] ?? message?._raw?.[field];
+}
+
+function getMessageBody(message) {
+  return message?.rawData ?? message?.decodedBody ?? message?._raw?.decodedBody ?? message?.body ?? message?._raw?.body;
+}
+
+function getMessageLabel(message) {
+  const cmd = getMessageField(message, 'cmd');
+  const resp = getMessageField(message, 'resp');
+  if (cmd) return cmd;
+  if (resp !== undefined && resp !== null) return `resp:${resp}`;
+  return 'unknown';
+}
+
 class GameWsClient {
   constructor(options = {}) {
     const {
@@ -310,6 +326,7 @@ class GameWsClient {
   sendCmd(cmd, params = {}) {
     const packet = this.registry.build(cmd, this.ack, this.seq++, params);
     this.sendQueue.push(packet);
+    return packet;
   }
 
   sendWithPromise(cmd, params = {}, timeout = 8000) {
@@ -317,6 +334,9 @@ class GameWsClient {
     return new Promise((resolve, reject) => {
       const timeoutId = setTimeout(() => {
         this.waitingPromises.delete(respKey);
+        if (requestSeq !== undefined && requestSeq !== null) {
+          this.waitingPromises.delete(`seq:${requestSeq}`);
+        }
         const diagnostics = this.getDiagnostics();
         const closeText = this.lastClose
           ? `; last close code=${this.lastClose.code}, reason=${this.lastClose.reason || 'none'}`
@@ -327,12 +347,40 @@ class GameWsClient {
         const receivedText = diagnostics.lastReceivedMessages.length
           ? `; last received=${diagnostics.lastReceivedMessages.map((item) => item.cmd).join(',')}`
           : '';
-        reject(new Error(`Request timeout: ${cmd}${closeText}${errorText}${receivedText}`));
+        const waitingText = requestSeq !== undefined ? `; waiting seq=${requestSeq}` : '';
+        reject(new Error(`Request timeout: ${cmd}${closeText}${errorText}${receivedText}${waitingText}`));
       }, timeout);
 
-      this.waitingPromises.set(respKey, { cmd, resolve, reject, timeoutId });
-      this.sendCmd(cmd, params);
+      const packet = this.sendCmd(cmd, params);
+      const requestSeq = packet?.seq;
+      this.waitingPromises.set(respKey, { cmd, resolve, reject, timeoutId, requestSeq, respKey });
+      if (requestSeq !== undefined && requestSeq !== null) {
+        this.waitingPromises.set(`seq:${requestSeq}`, { cmd, resolve, reject, timeoutId, requestSeq, respKey });
+      }
     });
+  }
+
+  _resolveWaitingPromise(matchedKey, message) {
+    const waiting = this.waitingPromises.get(matchedKey);
+    if (!waiting) return false;
+
+    const { resolve, reject, timeoutId, respKey, requestSeq } = waiting;
+    clearTimeout(timeoutId);
+    this.waitingPromises.delete(respKey || matchedKey);
+    if (requestSeq !== undefined && requestSeq !== null) {
+      this.waitingPromises.delete(`seq:${requestSeq}`);
+    }
+    this.waitingPromises.delete(matchedKey);
+
+    const code = Number(getMessageField(message, 'code') || 0);
+    if (code === 0) {
+      resolve(getMessageBody(message) || message);
+    } else {
+      const hint = getMessageField(message, 'hint') || getMessageField(message, 'error');
+      const errorDesc = errorCodeMap[code] || hint || '未知错误';
+      reject(new Error(`服务器错误: ${code} - ${errorDesc}`));
+    }
+    return true;
   }
 
   async connectAndExecute(url, taskFn, wsOptions = {}) {
@@ -352,19 +400,27 @@ class GameWsClient {
 
       if (!message) return;
 
-      if (message.seq) {
-        this.ack = message.seq;
+      const seq = getMessageField(message, 'seq');
+      if (typeof seq === 'number' && seq >= 0) {
+        this.ack = seq;
       }
 
-      const cmd = message.cmd || message._raw?.cmd;
+      const cmd = getMessageField(message, 'cmd');
+      const resp = getMessageField(message, 'resp');
+
+      this.lastReceivedMessages.push({
+        cmd: getMessageLabel(message),
+        at: new Date().toISOString(),
+      });
+      this.lastReceivedMessages = this.lastReceivedMessages.slice(-10);
+
+      if (resp !== undefined && resp !== null) {
+        if (this._resolveWaitingPromise(`seq:${resp}`, message)) {
+          return;
+        }
+      }
 
       if (cmd) {
-        this.lastReceivedMessages.push({
-          cmd,
-          at: new Date().toISOString(),
-        });
-        this.lastReceivedMessages = this.lastReceivedMessages.slice(-10);
-
         const respCmdKey = getResponseKey(cmd);
         const candidateKeys = [
           respCmdKey,
@@ -373,10 +429,7 @@ class GameWsClient {
         ];
         const matchedKey = candidateKeys.find((key) => this.waitingPromises.has(key));
         if (matchedKey) {
-          const { resolve, timeoutId } = this.waitingPromises.get(matchedKey);
-          clearTimeout(timeoutId);
-          this.waitingPromises.delete(matchedKey);
-          resolve(message);
+          this._resolveWaitingPromise(matchedKey, message);
           return;
         }
       }

@@ -16,6 +16,10 @@ async function tokenRoutes(fastify) {
     return { tokens };
   });
 
+  fastify.post('/api/tokens/cleanup-duplicates', async (request) => {
+    return tokenService.cleanupDuplicates(request.user.id);
+  });
+
   fastify.get('/api/tokens/:id', async (request) => {
     const token = await tokenService.getTokenWithDecryption(
       parseInt(request.params.id, 10),

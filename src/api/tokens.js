@@ -28,6 +28,11 @@ export const tokensApi = {
     return data;
   },
 
+  async cleanupDuplicates() {
+    const { data } = await apiClient.post('/tokens/cleanup-duplicates');
+    return data;
+  },
+
   async testToken(id) {
     const { data } = await apiClient.post(`/tokens/${id}/test`);
     return data;

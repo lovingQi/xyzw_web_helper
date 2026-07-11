@@ -27,6 +27,10 @@ const config = {
     notifyUrl: process.env.PAYMENT_NOTIFY_URL || '',
   },
 
+  admin: {
+    apiKey: process.env.ADMIN_API_KEY || '',
+  },
+
   proxy: {
     enabled: process.env.PROXY_ENABLED === 'true',
     apiUrl: process.env.PROXY_API_URL || '',

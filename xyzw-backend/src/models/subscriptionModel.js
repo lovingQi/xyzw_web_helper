@@ -1,4 +1,5 @@
 const { query } = require('../config/database');
+const { ValidationError } = require('../utils/errors');
 
 const subscriptionModel = {
   async create({ userId, tier, maxTokens, startsAt, expiresAt, paymentId }) {
@@ -23,6 +24,10 @@ const subscriptionModel = {
 
   async extendOrCreate(userId, tier, maxTokens, days, paymentId) {
     const existing = await this.findActiveByUserId(userId);
+
+    if (tier === 'trial' && existing?.tier === 'basic') {
+      throw new ValidationError('用户已有有效付费订阅，不能开通试用');
+    }
 
     if (existing && existing.tier === tier) {
       const { rows } = await query(

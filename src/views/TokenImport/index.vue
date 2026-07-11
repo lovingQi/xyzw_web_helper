@@ -106,40 +106,45 @@
       <!-- Token列表 -->
       <div v-if="tokenStore.hasTokens" class="tokens-section">
         <div class="section-header">
-          <n-space align="center">
+          <div class="header-main">
             <h2>我的Token列表 ({{ tokenStore.gameTokens.length }}个)</h2>
-            <n-radio-group v-model:value="viewMode" size="small">
-              <n-radio-button value="list">列表</n-radio-button>
-              <n-radio-button value="card">卡片</n-radio-button>
-            </n-radio-group>
-            <n-divider vertical style="height: 24px"></n-divider>
-            <n-button-group size="small">
-              <n-button
-                @click="toggleSort('name')"
-                :type="sortConfig.field === 'name' ? 'primary' : 'default'"
-              >
-                名称 {{ getSortIcon("name") }}
-              </n-button>
-              <n-button
-                @click="toggleSort('server')"
-                :type="sortConfig.field === 'server' ? 'primary' : 'default'"
-              >
-                服务器 {{ getSortIcon("server") }}
-              </n-button>
-              <n-button
-                @click="toggleSort('createdAt')"
-                :type="sortConfig.field === 'createdAt' ? 'primary' : 'default'"
-              >
-                创建时间 {{ getSortIcon("createdAt") }}
-              </n-button>
-              <n-button
-                @click="toggleSort('lastUsed')"
-                :type="sortConfig.field === 'lastUsed' ? 'primary' : 'default'"
-              >
-                最后使用 {{ getSortIcon("lastUsed") }}
-              </n-button>
-            </n-button-group>
-          </n-space>
+            <div class="header-controls">
+              <n-radio-group v-model:value="viewMode" size="small">
+                <n-radio-button value="list">列表</n-radio-button>
+                <n-radio-button value="card">卡片</n-radio-button>
+              </n-radio-group>
+              <n-button-group size="small" class="sort-actions">
+                <n-button
+                  class="sort-name"
+                  @click="toggleSort('name')"
+                  :type="sortConfig.field === 'name' ? 'primary' : 'default'"
+                >
+                  名称 {{ getSortIcon("name") }}
+                </n-button>
+                <n-button
+                  class="sort-server"
+                  @click="toggleSort('server')"
+                  :type="sortConfig.field === 'server' ? 'primary' : 'default'"
+                >
+                  服务器 {{ getSortIcon("server") }}
+                </n-button>
+                <n-button
+                  class="sort-created"
+                  @click="toggleSort('createdAt')"
+                  :type="sortConfig.field === 'createdAt' ? 'primary' : 'default'"
+                >
+                  创建时间 {{ getSortIcon("createdAt") }}
+                </n-button>
+                <n-button
+                  class="sort-last-used"
+                  @click="toggleSort('lastUsed')"
+                  :type="sortConfig.field === 'lastUsed' ? 'primary' : 'default'"
+                >
+                  最后使用 {{ getSortIcon("lastUsed") }}
+                </n-button>
+              </n-button-group>
+            </div>
+          </div>
           <div class="header-actions">
             <n-button type="success" @click="goToDashboard">
               <template #icon>
@@ -733,13 +738,30 @@ const sortConfig = ref(
       },
 );
 
+const uniqueTokensByRole = (tokens) => {
+  const map = new Map();
+  tokens.forEach((token) => {
+    const key = `${token.name || ""}::${token.server || ""}`;
+    const current = map.get(key);
+    const tokenTime = new Date(token.lastUsed || token.last_connected_at || token.createdAt || 0).getTime();
+    const currentTime = current
+      ? new Date(current.lastUsed || current.last_connected_at || current.createdAt || 0).getTime()
+      : -1;
+    if (!current || tokenTime >= currentTime) {
+      map.set(key, token);
+    }
+  });
+  return Array.from(map.values());
+};
+
 // 排序后的游戏角色Token列表
 const sortedTokens = computed(() => {
+  const displayTokens = uniqueTokensByRole(tokenStore.gameTokens);
   if (sortConfig.value.field === "manual") {
-    return tokenStore.gameTokens;
+    return displayTokens;
   }
 
-  return [...tokenStore.gameTokens].sort((tokenA, tokenB) => {
+  return [...displayTokens].sort((tokenA, tokenB) => {
     let valueA, valueB;
 
     // 根据排序字段获取比较值
@@ -1632,7 +1654,7 @@ const handleUrlParams = async () => {
           }, 1500);
         } else {
           // 清除URL参数，避免重复处理
-          router.replace("/tokens");
+          router.replace("/admin/tokens");
         }
       } else {
         throw new Error(tokenResult?.message || "Token导入失败");
@@ -1641,7 +1663,7 @@ const handleUrlParams = async () => {
       console.error("URL参数处理失败:", error);
       message.error(`导入失败: ${error.message}`);
       // 清除URL参数
-      router.replace("/tokens");
+      router.replace("/admin/tokens");
     } finally {
       isImporting.value = false;
     }
@@ -2010,6 +2032,7 @@ onUnmounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: var(--spacing-md);
   margin-bottom: var(--spacing-xl);
   position: sticky;
   top: 0;
@@ -2027,13 +2050,61 @@ onUnmounted(() => {
   }
 }
 
+.header-main {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.header-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: var(--spacing-sm);
+  min-width: 0;
+  overflow: hidden;
+}
+
+.sort-actions {
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-wrap: nowrap;
+}
+
 .header-actions {
   display: flex;
-  gap: var(--spacing-md);
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  min-width: max-content;
   max-width: 100%;
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
   flex-wrap: nowrap;
+}
+
+.header-actions :deep(.n-button),
+.sort-actions :deep(.n-button) {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.sort-actions :deep(.n-button) {
+  padding-left: 10px;
+  padding-right: 10px;
+}
+
+@media (max-width: 1320px) {
+  .sort-actions :deep(.sort-last-used) {
+    display: none;
+  }
+}
+
+@media (max-width: 1180px) {
+  .sort-actions :deep(.sort-server) {
+    display: none;
+  }
 }
 
 .tokens-grid {
@@ -2399,9 +2470,10 @@ onUnmounted(() => {
   }
 
   .section-header {
-    flex-direction: column;
-    gap: var(--spacing-md);
-    align-items: stretch;
+    flex-direction: row;
+    gap: var(--spacing-sm);
+    align-items: center;
+    overflow-x: auto;
   }
 
   .token-timestamps {

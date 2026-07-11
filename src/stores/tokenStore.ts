@@ -402,7 +402,7 @@ export const useTokenStore = defineStore("tokens", () => {
       const currentPath = router.currentRoute.value.path;
       const shouldReconnect =
         forceReconnect ||
-        currentPath === "/tokens" ||
+        currentPath === "/admin/tokens" ||
         currentPath === "/admin/game-features";
 
       if (shouldReconnect) {
