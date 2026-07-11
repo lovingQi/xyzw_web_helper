@@ -37,9 +37,12 @@ services:
       PORT: 3001
       HOST: 0.0.0.0
       PROXY_ENABLED: "false"
+      PAYMENT_PROVIDER: ${PAYMENT_PROVIDER:-mock}
+      PAYMENT_MOCK_ENABLED: ${PAYMENT_MOCK_ENABLED:-false}
       PAYMENT_APP_ID: ${PAYMENT_APP_ID:-}
       PAYMENT_APP_SECRET: ${PAYMENT_APP_SECRET:-}
       PAYMENT_NOTIFY_URL: ${PAYMENT_NOTIFY_URL:-}
+      PAYMENT_RETURN_URL: ${PAYMENT_RETURN_URL:-}
     depends_on:
       postgres:
         condition: service_healthy

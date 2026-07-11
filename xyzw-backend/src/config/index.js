@@ -22,9 +22,12 @@ const config = {
   tokenEncryptKey: process.env.TOKEN_ENCRYPT_KEY || '',
 
   payment: {
+    provider: process.env.PAYMENT_PROVIDER || 'mock',
     appId: process.env.PAYMENT_APP_ID || '',
     appSecret: process.env.PAYMENT_APP_SECRET || '',
     notifyUrl: process.env.PAYMENT_NOTIFY_URL || '',
+    returnUrl: process.env.PAYMENT_RETURN_URL || '',
+    mockEnabled: process.env.PAYMENT_MOCK_ENABLED === 'true' || process.env.NODE_ENV !== 'production',
   },
 
   admin: {

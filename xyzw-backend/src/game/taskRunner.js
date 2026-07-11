@@ -30,6 +30,7 @@ const getTodayBossId = () => {
 
 const delay = (ms) => new Promise(r => setTimeout(r, ms));
 const { LEGACY_TASK_ALIASES } = require('./batchTaskDefinitions');
+const { classifyTaskError } = require('./taskErrorClassifier');
 
 class SkipTaskError extends Error {
   constructor(message) {
@@ -114,6 +115,27 @@ class TaskRunner {
     }
   }
 
+  async execOptionalNoResponse(cmd, params = {}, description = '', timeout = 5000, options = {}) {
+    try {
+      return await this.exec(cmd, params, description, timeout);
+    } catch (error) {
+      const classified = classifyTaskError(error);
+      if (classified.isNormal) {
+        this.log(`${description || cmd} - ${classified.message}，正常跳过`, 'success');
+        return null;
+      }
+      if (Array.isArray(options.normalErrorCodes) && classified.code && options.normalErrorCodes.includes(classified.code)) {
+        this.log(`${description || cmd} - ${classified.message}，按当前任务正常跳过`, 'success');
+        return null;
+      }
+      if (error.message?.includes('Request timeout')) {
+        this.log(`${description || cmd} - 命令已发出但未收到业务响应，按待确认跳过`, 'warning');
+        return null;
+      }
+      throw error;
+    }
+  }
+
   logDiagnostics(cmd, since) {
     if (!this.ws?.getDiagnostics) return;
     const diagnostics = this.ws.getDiagnostics();
@@ -185,8 +207,14 @@ class TaskRunner {
         if (error instanceof SkipTaskError) {
           result.tasksRun++;
         } else {
-          result.tasksFailed++;
-          this.log(`任务[${step.name}]失败: ${error.message}`, 'error');
+          const classified = classifyTaskError(error);
+          if (classified.isNormal) {
+            this.log(`任务[${step.name}]正常结束: ${classified.message}`, 'success');
+            result.tasksRun++;
+          } else {
+            result.tasksFailed++;
+            this.log(`任务[${step.name}]失败: ${error.message}`, 'error');
+          }
         }
       }
       await delay(this.settings.taskDelay);
@@ -198,6 +226,15 @@ class TaskRunner {
     }
     result.logs = this.logs;
     return result;
+  }
+
+  handleNormalClassifiedError(error, context) {
+    const classified = classifyTaskError(error);
+    if (classified.isNormal) {
+      this.log(`${context}: ${classified.message}，正常结束`, 'success');
+      return true;
+    }
+    return false;
   }
 
   async batchOpenBox(boxType = this.settings.defaultBoxType, totalCount = this.settings.boxCount) {
@@ -267,13 +304,14 @@ class TaskRunner {
         completed++;
         consecutiveFailures = 0;
       } catch (error) {
-        if (error.message?.includes('200400')) {
+        const classified = classifyTaskError(error);
+        if (classified.action === 'wait_retry') {
           this.log('爬塔操作过快，等待5秒后重试', 'warning');
           await delay(5000);
           continue;
         }
 
-        if (error.message?.includes('1500040')) {
+        if (classified.action === 'claim_tower_reward') {
           this.log('上座塔奖励未领取，尝试自动领取后继续', 'warning');
           roleInfo = roleInfo || await this.tolerate(() => this.exec('role_getroleinfo', {}, '刷新角色信息'), '刷新角色信息');
           const towerId = roleInfo?.role?.tower?.id || roleInfo?.rawData?.role?.tower?.id;
@@ -292,8 +330,8 @@ class TaskRunner {
           continue;
         }
 
-        if (error.message?.includes('1500020')) {
-          this.log('爬塔能量不足，正常结束', 'success');
+        if (classified.isNormal) {
+          this.log(`爬塔${classified.message}，正常结束`, 'success');
           break;
         }
 
@@ -694,7 +732,7 @@ class TaskRunner {
       tasks.push({
         type: 'daily_signin',
         name: '签到',
-        fn: () => this.exec('system_signinreward', {}, '签到奖励'),
+        fn: () => this.execOptionalNoResponse('system_signinreward', {}, '签到奖励'),
       });
 
       // 7. 竞技场
@@ -796,11 +834,13 @@ class TaskRunner {
       }
 
       // 11. 免费扭蛋
-      if (s.freeGachaEnable) {
+      if (s.freeGachaEnable && isTodayAvailable(statisticsTime['gacha:free'])) {
         tasks.push({
           type: 'gacha',
           name: '免费扭蛋',
-          fn: () => this.exec('gacha_drawreward', { num: 1, isGroup: false }, '免费扭蛋'),
+          fn: () => this.execOptionalNoResponse('gacha_drawreward', { num: 1, isGroup: false }, '免费扭蛋', 5000, {
+            normalErrorCodes: ['200020'],
+          }),
         });
       }
 

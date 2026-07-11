@@ -65,14 +65,52 @@
       </n-spin>
     </section>
 
+    <section class="history-section">
+      <div class="section-title">
+        <h2>支付记录</h2>
+        <n-button text :loading="paymentsLoading" @click="loadPayments">刷新</n-button>
+      </div>
+      <n-spin :show="paymentsLoading">
+        <div v-if="payments.length" class="payments-table">
+          <div class="payments-head">
+            <span>订单号</span>
+            <span>状态</span>
+            <span>金额</span>
+            <span>Token</span>
+            <span>支付通道</span>
+            <span>创建时间</span>
+          </div>
+          <div v-for="payment in payments" :key="payment.id" class="payments-row">
+            <span class="mono">{{ payment.order_no }}</span>
+            <span>{{ payment.payment_status }}</span>
+            <span>¥{{ formatAmount(payment.amount_cents) }}</span>
+            <span>{{ payment.max_tokens || 1 }}</span>
+            <span>{{ payment.provider || payment.payment_method || "-" }}</span>
+            <span>{{ formatDateTime(payment.created_at) }}</span>
+          </div>
+        </div>
+        <n-empty v-else description="暂无支付记录" />
+      </n-spin>
+    </section>
+
     <n-modal v-model:show="showOrderModal" preset="card" title="支付订单" class="order-modal">
       <div v-if="createdOrder" class="order-info">
         <div><span>订单号</span><strong>{{ createdOrder.orderNo }}</strong></div>
         <div><span>套餐</span><strong>{{ createdOrder.label }}</strong></div>
+        <div><span>支付通道</span><strong>{{ createdOrder.provider || "mock" }}</strong></div>
         <div><span>Token 数量</span><strong>{{ createdOrder.maxTokens }} 个</strong></div>
         <div><span>额外 Token</span><strong>{{ createdOrder.extraTokens }} 个</strong></div>
         <div><span>金额</span><strong>¥{{ createdOrder.amount }}</strong></div>
-        <n-alert type="info" :bordered="false">
+        <div v-if="createdOrder.expiresAt"><span>订单过期</span><strong>{{ formatDateTime(createdOrder.expiresAt) }}</strong></div>
+        <div v-if="createdOrder.payUrl">
+          <span>支付链接</span>
+          <a :href="createdOrder.payUrl" target="_blank" rel="noopener">打开支付页面</a>
+        </div>
+        <div v-if="createdOrder.qrCodeUrl" class="qr-row">
+          <span>支付二维码</span>
+          <img :src="createdOrder.qrCodeUrl" alt="支付二维码" />
+        </div>
+        <n-alert :type="createdOrder.provider === 'mock' ? 'warning' : 'info'" :bordered="false">
           {{ createdOrder.message || "请根据支付页面完成付款。" }}
         </n-alert>
       </div>
@@ -84,6 +122,7 @@
 import { computed, onMounted, ref } from 'vue';
 import { useMessage } from 'naive-ui';
 import { useSubscriptionStore } from '@/stores/subscriptionStore';
+import { paymentsApi } from '@/api/payments';
 
 const message = useMessage();
 const subscriptionStore = useSubscriptionStore();
@@ -91,11 +130,22 @@ const creatingPlanId = ref('');
 const showOrderModal = ref(false);
 const createdOrder = ref(null);
 const selectedTokenCounts = ref({});
+const payments = ref([]);
+const paymentsLoading = ref(false);
 
 const expiresText = computed(() => {
   if (!subscriptionStore.expiresAt) return '无';
-  return new Date(subscriptionStore.expiresAt).toLocaleString();
+  return formatDateTime(subscriptionStore.expiresAt);
 });
+
+function formatDateTime(value) {
+  if (!value) return '无';
+  return new Date(value).toLocaleString();
+}
+
+function formatAmount(amountCents) {
+  return ((Number(amountCents || 0)) / 100).toFixed(2);
+}
 
 function calculateExtraMonthlyPrice(extraTokens) {
   if (extraTokens <= 0) return 0;
@@ -127,6 +177,7 @@ async function createOrder(planId) {
       maxTokens: plan ? getSelectedTokens(plan) : 1,
     });
     showOrderModal.value = true;
+    await loadPayments();
     message.success('订单已创建');
   } catch (error) {
     message.error(error.response?.data?.message || '创建订单失败');
@@ -135,10 +186,23 @@ async function createOrder(planId) {
   }
 }
 
+async function loadPayments() {
+  paymentsLoading.value = true;
+  try {
+    const result = await paymentsApi.getHistory({ limit: 20, offset: 0 });
+    payments.value = result.payments || [];
+  } catch (error) {
+    message.error(error.response?.data?.message || '支付记录加载失败');
+  } finally {
+    paymentsLoading.value = false;
+  }
+}
+
 onMounted(async () => {
   await Promise.all([
     subscriptionStore.fetchCurrent(),
     subscriptionStore.fetchPlans(),
+    loadPayments(),
   ]);
   subscriptionStore.plans.forEach((plan) => {
     selectedTokenCounts.value[plan.id] = plan.includedTokens || 1;
@@ -179,7 +243,8 @@ onMounted(async () => {
 }
 
 .current-band,
-.plans-grid {
+.plans-grid,
+.history-section {
   max-width: 1100px;
   margin: 0 auto;
 }
@@ -212,6 +277,56 @@ onMounted(async () => {
 
 .plans-section {
   margin-top: 24px;
+}
+
+.history-section {
+  margin-top: 24px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  padding: 20px;
+}
+
+.section-title,
+.payments-head,
+.payments-row {
+  display: grid;
+  grid-template-columns: 2fr 0.8fr 0.8fr 0.7fr 1fr 1.4fr;
+  gap: 12px;
+  align-items: center;
+}
+
+.section-title {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.section-title h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.payments-head {
+  color: var(--text-secondary);
+  font-size: 13px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.payments-row {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border-light);
+  font-size: 13px;
+}
+
+.payments-row:last-child {
+  border-bottom: none;
+}
+
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  word-break: break-all;
 }
 
 .plans-grid {
@@ -281,6 +396,25 @@ onMounted(async () => {
   gap: 16px;
 }
 
+.order-info a {
+  color: var(--primary-color);
+  text-decoration: none;
+}
+
+.qr-row {
+  align-items: flex-start;
+}
+
+.qr-row img {
+  width: 180px;
+  height: 180px;
+  object-fit: contain;
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  background: #fff;
+  padding: 8px;
+}
+
 @media (max-width: 768px) {
   .subscription-page {
     padding: 20px;
@@ -292,8 +426,14 @@ onMounted(async () => {
   }
 
   .current-band,
-  .plans-grid {
+  .plans-grid,
+  .payments-head,
+  .payments-row {
     grid-template-columns: 1fr;
+  }
+
+  .payments-head {
+    display: none;
   }
 }
 </style>

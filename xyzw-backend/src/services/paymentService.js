@@ -1,7 +1,9 @@
 const crypto = require('crypto');
+const config = require('../config');
 const paymentModel = require('../models/paymentModel');
 const subscriptionModel = require('../models/subscriptionModel');
 const { ValidationError } = require('../utils/errors');
+const { getProvider, listProviders } = require('./payments/providers');
 
 const INCLUDED_TOKENS = 1;
 const MIN_TOKENS = 1;
@@ -73,6 +75,14 @@ const paymentService = {
     }));
   },
 
+  getProviderInfo() {
+    return {
+      current: config.payment.provider,
+      available: listProviders(),
+      mockEnabled: config.payment.mockEnabled,
+    };
+  },
+
   async createOrder(userId, { planId, paymentMethod, maxTokens = INCLUDED_TOKENS }) {
     if (!['wechat', 'alipay'].includes(paymentMethod)) {
       throw new ValidationError('无效的支付方式');
@@ -95,23 +105,17 @@ const paymentService = {
       extraTokens: price.extraTokens,
     });
 
-    // TODO: 对接第三方支付API获取支付URL/二维码
-    // const payResult = await thirdPartyPay.create({ orderNo, amount, ... });
-
-    return {
-      orderNo: payment.order_no,
-      amount: price.amount,
-      label: plan.label,
+    const provider = getProvider(config.payment.provider);
+    return provider.createOrder({
+      payment,
+      price,
+      plan,
       paymentMethod,
-      maxTokens: price.maxTokens,
-      extraTokens: price.extraTokens,
-      // payUrl: payResult.payUrl,
-      // qrCodeUrl: payResult.qrCodeUrl,
-      message: '支付接口待对接，请联系管理员手动激活',
-    };
+      config,
+    });
   },
 
-  async handleCallback({ orderNo, tradeNo, status }) {
+  async applyPaymentResult({ orderNo, tradeNo, status }) {
     const payment = await paymentModel.findByOrderNo(orderNo);
     if (!payment) return false;
     if (payment.payment_status === 'paid') return true;
@@ -142,8 +146,18 @@ const paymentService = {
     return false;
   },
 
+  async handleCallback({ body, query, headers }) {
+    const provider = getProvider(config.payment.provider);
+    const verified = provider.verifyNotify({ body, query, headers, config });
+    return this.applyPaymentResult(verified);
+  },
+
   async getPaymentHistory(userId, { limit, offset } = {}) {
-    return paymentModel.findByUserId(userId, { limit, offset });
+    const payments = await paymentModel.findByUserId(userId, { limit, offset });
+    return payments.map((payment) => ({
+      ...payment,
+      provider: config.payment.provider,
+    }));
   },
 
   calculatePlanPrice,

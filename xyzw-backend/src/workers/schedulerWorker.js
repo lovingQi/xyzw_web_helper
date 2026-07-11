@@ -2,6 +2,7 @@ const { Queue, Worker } = require('bullmq');
 const redis = require('../config/redis');
 const { query } = require('../config/database');
 const systemConfigModel = require('../models/systemConfigModel');
+const subscriptionService = require('../services/subscriptionService');
 const { calculateNextExecutionTime } = require('../utils/cronUtils');
 
 const TASK_EXECUTION_QUEUE = 'task-execution';
@@ -18,6 +19,12 @@ function getExecutionQueue() {
 
 async function scanAndEnqueue() {
   await systemConfigModel.set('task_scheduler_last_scan_at', new Date().toISOString(), '任务调度器最近扫描时间');
+  const expiredSubscriptions = await subscriptionService.expireOverdueSubscriptions();
+  await systemConfigModel.set('subscription_expire_last_scan_at', new Date().toISOString(), '订阅过期扫描最近执行时间');
+  await systemConfigModel.set('subscription_expire_last_scan_result', {
+    status: 'ok',
+    expired: expiredSubscriptions,
+  }, '订阅过期扫描最近执行结果');
 
   const healthy = await systemConfigModel.get('protocol_healthy');
   if (healthy === false) {
@@ -35,6 +42,10 @@ async function scanAndEnqueue() {
      FROM task_configs tc
      JOIN game_tokens gt ON gt.id = tc.token_id AND gt.status = 'active'
      JOIN users u ON u.id = tc.user_id AND u.status = 'active'
+     JOIN subscriptions s ON s.user_id = tc.user_id
+       AND s.status = 'active'
+       AND s.expires_at > NOW()
+       AND s.tier IN ('trial', 'basic')
      WHERE tc.enabled = true AND tc.next_run_at <= NOW()
      LIMIT 200`
   );

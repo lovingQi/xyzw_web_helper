@@ -42,7 +42,7 @@ const tokenModel = {
 
   async findByIdAndUser(id, userId) {
     const { rows } = await query(
-      'SELECT * FROM game_tokens WHERE id = $1 AND user_id = $2',
+      'SELECT * FROM game_tokens WHERE id = $1 AND user_id = $2 AND status = \'active\'',
       [id, userId]
     );
     return rows[0] || null;
@@ -88,7 +88,7 @@ const tokenModel = {
 
   async countByUserId(userId) {
     const { rows } = await query(
-      'SELECT COUNT(*)::int AS count FROM game_tokens WHERE user_id = $1',
+      'SELECT COUNT(*)::int AS count FROM game_tokens WHERE user_id = $1 AND status = \'active\'',
       [userId]
     );
     return rows[0].count;

@@ -147,7 +147,11 @@ All game engine modules OK!
 - 真实角色状态深挖：当前角色 `dailyTask.complete` 只有 `{ "1": 30 }`，`bottleHelpers.helperStopTime=0`，没有 `gacha`/`signin` 相关 `statisticsTime` 字段，`legionId=0`。
 - 状态探针结果：`activity_get`、`discount_getdiscountinfo`、`mail_getlist`、`store_goodslist` 有正常响应；`collection_goodslist`、`legion_getinfo`、`car_getrolecar`、`mergebox_getinfo` 等在当前角色状态下无业务响应。
 - `bottle` 已修复为状态跳过：`task_logs.id=26` 成功登录并判定未发现运行中的盐罐机器人，记录为成功跳过。
-- 当前仍需深挖的真实命令：`daily_signin` 的 `system_signinreward`（`task_logs.id=25`）与 `gacha_drawreward`（`task_logs.id=27`）均能登录并执行到命令发送阶段，但未收到业务响应；抓包日志显示命令发出后只收到 `system_newchatmessagenotify` 等非目标响应。
+- `daily_signin` 已复测通过：`task_logs.id=47` 成功登录真实角色，`system_signinreward` 返回 `400190 没有可领取的签到奖励`，已归类为正常跳过，任务日志状态 `success`。
+- `gacha` 已复测通过：`task_logs.id=50` 成功登录真实角色，`gacha_drawreward` 在当前账号状态下返回 `200020 出了点小问题，请尝试重启游戏解决～`，已限定为免费扭蛋任务的正常跳过，任务日志状态 `success`。
+- `batchFish` 已真实验证：`task_logs.id=53` 成功执行 `artifact_lottery`，领取累计奖励因 `400180 鱼灵积分不足` 容错继续，任务日志状态 `success`。
+- `batchOpenBox` 已真实验证：`task_logs.id=54` 发送 `item_openbox` 后返回 `400122 宝箱数量已发生变化`，已归类为正常结束，任务日志状态 `success`。
+- 同一 Token 并发保护已验证：并发投递开箱/钓鱼时，第二个任务被 Redis Token 锁拦截并记录“同一Token已有后端任务正在执行，请稍后重试”，避免后端自身抢登录。
 - 后端任务已覆盖前端批量日常入口中的主要任务类型：日常任务、邮件、挂机、盐罐、俱乐部签到、竞技场、Boss、开箱、按积分开箱、领取宝箱积分、钓鱼、招募、爬塔、怪异塔、宝库、梦境、怪异塔道具/合成、功法、收发车、蟠桃园、换皮闯关等均已接入 `TaskRunner.runBatchTaskValue()` 分发。
 - 后端 WebSocket Promise 匹配已对齐前端：支持优先按响应包 `resp` 数字匹配请求 `seq`，并保留 cmd/响应映射匹配；这修复了 `presetteam_saveteam` 只返回 `resp` 时被后端漏掉导致超时的问题。
 - 一键爬塔 `climbTower` 已真实验证：
@@ -208,24 +212,28 @@ All game engine modules OK!
 
 ---
 
-### P6：支付系统（步骤 68-77）🟡（框架完成）
+### P6：支付系统（步骤 68-77）🟡（Provider 架构完成）
 
 | # | 步骤 | 状态 | 产出文件 |
 |---|------|------|---------|
-| 68 | 选定第三方支付 | 🔲 待完成 | 需注册虎皮椒/PayJS 账号 |
+| 68 | 选定第三方支付 | 🟡 Provider 已预留 | 已预留 `mock`、`xunhupay`、`payjs`；真实商户参数待获取 |
 | 69 | Payment Model | ✅ | `src/models/paymentModel.js` |
 | 70 | Subscription Model | ✅ | `src/models/subscriptionModel.js` |
-| 71 | Payment Service | ✅ | `src/services/paymentService.js` |
+| 71 | Payment Service | ✅ | `src/services/paymentService.js` + `src/services/payments/providers/*` |
 | 72 | Subscription Service | ✅ | `src/services/subscriptionService.js` |
 | 73 | Payments 路由 | ✅ | `src/routes/payments.js` |
 | 74 | Subscription 路由 | ✅ | `src/routes/subscription.js` |
-| 75 | Subscription 前端页面 | ✅ | `src/views/Subscription.vue`，套餐卡片 + 订单弹窗 |
-| 76 | 订阅过期定时任务 | 🟡 部分完成 | `subscriptionService.expireOverdueSubscriptions()` 已有，定时触发待补 |
-| 77 | 支付全流程验证 | 🟡 模拟通过 | 本地创建订单 + notify 模拟回调 + 订阅升级已验证；第三方待接 |
+| 75 | Subscription 前端页面 | ✅ | `src/views/Subscription.vue`，套餐卡片 + provider 订单弹窗 |
+| 76 | 订阅过期定时任务 | ✅ | scheduler 扫描时触发 `expireOverdueSubscriptions()`，并写入 system_config 扫描记录 |
+| 77 | 支付全流程验证 | 🟡 Provider mock 通过 | 本地 provider 下单 + notify 模拟回调 + 订阅升级已验证；真实 provider 待接 |
 
 **说明**：
-- 当前支付仍是“模拟回调/管理员激活”框架，未接真实第三方支付二维码。
-- 已验证模拟月卡支付后，套餐升级为 `basic`，Token 上限变为 10，任务调度权限开启。
+- 当前支付已抽象为 Provider 架构，`PAYMENT_PROVIDER=mock` 可用于内测/手动激活，`xunhupay/payjs` 已预留明确错误提示，避免生产误以为真实支付已接通。
+- `.env.production.example` 和 `docker-compose.yml` 已补充 `PAYMENT_PROVIDER`、`PAYMENT_MOCK_ENABLED`、`PAYMENT_RETURN_URL`。
+- 前端订单弹窗已支持展示 provider、过期时间、支付链接和二维码字段；mock 模式会显示明确提示。
+- `/admin/subscription` 已展示支付历史订单列表，调用 `/api/payments/history`，包含订单号、状态、金额、Token 数、支付通道和创建时间。
+- 已验证 mock provider 月卡支付：测试用户创建 3 Token 月卡订单，notify 模拟回调后套餐升级为 `basic`，Token 上限变为 3，任务调度权限开启。
+- 第三方真实支付因暂未提供虎皮椒/PayJS 商户参数，本阶段明确跳过；上线收费前仍需实现对应 provider 的签名、下单和回调验签。
 
 ---
 
@@ -238,8 +246,8 @@ All game engine modules OK!
 | 80 | 生产环境配置 | ✅ | `.env.production.example` |
 | 81 | VPS 部署测试 | 🔲 待完成 | 需在 Vultr VPS/目标服务器上验证 |
 | 82 | 全流程验证 | 🟡 本地核心通过 | 注册、登录、订阅、Token 同步、任务创建、Worker 日志均已本地验证 |
-| 83 | 备份策略 | 🔲 待完成 | PG pg_dump 定时备份 |
-| 84 | 运维文档 | 🔲 待完成 | - |
+| 83 | 备份策略 | ✅ | `scripts/backup-postgres.sh`, `docs/BACKUP.md` |
+| 84 | 运维文档 | ✅ | `docs/DEPLOYMENT.md`, `docs/BACKUP.md` |
 
 ---
 
@@ -387,25 +395,25 @@ xyzw-backend/
 
 ### 优先级 P0（上线前必须）
 
-- [ ] 第三方支付对接（虎皮椒/PayJS）— 获取 appId/secret 后实现 `paymentService.createOrder` 中的 TODO
+- [ ] 第三方支付对接（虎皮椒/PayJS）— 获取 appId/secret 后实现对应 provider 的签名、下单和回调验签
 - [ ] 生产环境密钥生成 — `openssl rand -hex 32` 生成 JWT_SECRET 和 TOKEN_ENCRYPT_KEY
 - [ ] Vultr VPS/目标服务器部署验证 — `docker-compose up -d` 后跑通 API、前端、Worker、Redis、PostgreSQL
 - [x] 后端定时任务配置页 — 已支持按 Token 创建后端任务，勾选日常/批量任务类型并持久化到 API
-- [ ] 逐个任务类型真实修复 — `mail`、`climbTower` 已真实跑通；`bottle`、`legion_signin` 已能按当前角色状态成功跳过；`daily_signin`、`gacha` 仍需真实前端在线对照或更深抓包
+- [ ] 逐个任务类型真实修复 — `mail`、`climbTower`、`daily_signin`、`gacha`、`batchFish`、`batchOpenBox` 已真实验证；`bottle`、`legion_signin` 已能按当前角色状态成功跳过；其余批量任务仍需继续逐个压测
 
 ### 优先级 P1（上线后一周内）
 
 - [ ] tokenStore.ts 深度重构 — 从“本地同步后端”升级为“后端为主、本地缓存为辅”
-- [ ] 订阅过期定时扫描 — 每日凌晨扫描过期订阅
-- [ ] 支付历史/订单状态前端展示
-- [ ] 任务失败重试与失败原因归类
+- [x] 订阅过期定时扫描 — scheduler 扫描时自动过期订阅，并记录最近扫描时间/结果
+- [x] 支付历史/订单状态前端展示 — 后端历史接口已附带 provider，前端列表已完成
+- [x] 任务失败重试与失败原因归类 — 已新增任务错误码分类，覆盖常见正常结束/跳过场景；复杂重试策略仍可后续增强
 
 ### 优先级 P2（稳定运行后）
 
 - [ ] 代理 IP 服务对接 — proxyService.js 实现
 - [ ] 健康检查完善 — 用测试 Token 连接游戏服务器，并记录协议/代理状态
 - [ ] 游戏协议版本配置化 — 从 system_config 读取 clientVersion
-- [ ] PG 定时备份 — pg_dump + 对象存储
+- [x] PG 备份脚本与文档 — 已提供 pg_dump 脚本；对象存储上传仍待接入
 - [ ] 监控告警 — 协议异常时邮件/Webhook 通知
 
 ### 优先级 P3（规模化后）
@@ -459,8 +467,11 @@ xyzw-backend/
 - 前端微信扫码导入 Token、本地 Token 自动同步到后端。
 - 订阅套餐页面、当前账号/套餐/Token 用量展示。
 - 任务日志页面：用户可在 `/admin/task-logs` 查看后端登录时间、任务类型、成功/失败状态、耗时、失败原因和详细步骤。
-- 模拟支付链路：创建订单、notify 回调、订阅升级、支付历史查询。
+- 支付 Provider 架构：mock provider 创建订单、notify 回调、订阅升级、支付历史查询已验证；xunhupay/payjs provider 待接真实商户参数。
+- 支付历史订单列表已在 `/admin/subscription` 展示，便于用户查看订单状态和支付通道。
 - 后端任务配置、run-now 入队、Worker 消费、任务日志落库。
+- 订阅过期扫描已接入 scheduler，过期订阅会自动标记，定时任务扫描会跳过订阅失效用户，`run-now` 也会校验订阅状态。
+- 任务错误码分类已接入 Worker，可将能量不足、已领取、未加入俱乐部、模块未开启、操作过快、免费扭蛋当前状态异常、宝箱数量变化等常见游戏状态归类为正常结束/跳过或重试。
 - Worker 已支持系统代理连接游戏 WebSocket。
 - Worker 已支持按 `taskType` 分发，`daily_signin` 不再误执行整套日常。
 - scheduler 自动触发链路已验证：到点扫描 `next_run_at`、自动入队、Worker 执行、回写 `last_run_at/last_result/next_run_at`。
@@ -468,16 +479,16 @@ xyzw-backend/
 
 ### 暂不满足正式上线的部分
 
-- 第三方真实支付尚未接入，当前只有模拟回调/管理员激活框架。
+- 第三方真实支付尚未接入；当前已有 provider 架构和 mock provider，但 xunhupay/payjs 仍待商户参数与签名实现。
 - 前端原批量任务页面仍可作为即时执行入口；后端定时任务配置页已支持创建持久化定时任务，但仍需要继续做更多任务类型的真实稳定性验证。
 - VPS/生产环境部署尚未完成端到端验证。
 - 住宅代理 IP 池尚未接入，仅支持系统级代理环境变量。
-- 多数具体任务类型尚未逐个真实跑通；当前 `mail`、`climbTower` 已真实成功，`bottle` 和 `legion_signin` 对当前角色状态可成功跳过，`daily_signin`、`gacha` 仍需真实前端在线对照或更深抓包。
+- 多数具体任务类型尚未逐个真实跑通；当前 `mail`、`climbTower`、`daily_signin`、`gacha`、`batchFish`、`batchOpenBox` 已真实验证，`bottle` 和 `legion_signin` 对当前角色状态可成功跳过，其余批量任务仍需继续逐个压测。
 
 ### 当前真实验证结论
 
 - 本地账号已导入 2 个真实微信扫码 Token，并同步到后端。
-- 通过模拟支付升级为基础版后，可以创建并立即执行后端任务。
+- 通过 mock provider 支付升级为基础版后，可以创建并立即执行后端任务；最新 provider 验证中 3 Token 月卡可成功开通 `basic`。
 - `task_id=15` 已完成最关键端到端验证：北京时间 2026-07-11 10:19:00 由 scheduler 自动触发，Worker 登录真实角色 `kidult`，执行 `mail_claimallattachment` 成功，日志状态 `success`，耗时约 3.7 秒。
 - `task_id=16` 已完成第二次定时验证：北京时间 2026-07-11 11:04:00 由 scheduler 自动触发，Worker 登录真实角色 `kidult`，执行 `mail_claimallattachment` 成功，日志状态 `success`，耗时约 6.4 秒。
 - `daily_signin` 已成功通过代理连接游戏服务器并获取角色信息；只执行签到相关动作，没有执行竞技场、Boss、邮件、瓶子等整套日常。
@@ -485,13 +496,17 @@ xyzw-backend/
 - `bottle` 最新验证 `task_logs.id=26`：成功获取角色信息，因 `bottleHelpers.helperStopTime=0` 判定没有运行中的盐罐机器人，成功跳过。
 - `climbTower` 最新验证 `task_logs.id=45`：成功登录真实角色，获取阵容/爬塔/角色信息，发送 `fight_starttower` 后收到 `1500020 能量不足`，按预期记录为正常结束，任务日志状态 `success`。
 - `climbTower` 深度验证 `task_logs.id=44`：在体力未耗尽时成功自动处理 `1500040 上座塔奖励未领取`，领取奖励后继续爬塔，证明后端可以连续发送爬塔战斗命令并处理奖励卡点。
-- 签到命令 `system_signinreward` 与免费扭蛋 `gacha_drawreward` 当前仍表现为请求超时；补齐响应映射后仍未收到目标业务响应，抓包日志显示命令发出后只收到聊天通知。
+- `daily_signin` 最新验证 `task_logs.id=47`：成功登录真实角色，`system_signinreward` 返回 `400190 没有可领取的签到奖励`，按正常跳过收尾，日志状态 `success`。
+- `gacha` 最新验证 `task_logs.id=50`：成功登录真实角色，`gacha_drawreward` 返回 `200020 出了点小问题，请尝试重启游戏解决～`，按免费扭蛋当前状态正常跳过收尾，日志状态 `success`。
+- `batchFish` 最新验证 `task_logs.id=53`：成功执行一次钓鱼，累计奖励因积分不足容错继续，日志状态 `success`。
+- `batchOpenBox` 最新验证 `task_logs.id=54`：成功发送开箱命令，遇到 `400122 宝箱数量已发生变化` 后正常结束，日志状态 `success`。
+- 同一 Token 并发保护已验证：并发任务会被 Redis Token 锁拦截，避免后端自身同时登录同一 Token。
 
 ### 建议上线判断
 
-- **可进入内测**：适合少量真实账号验证 Token 同步、订阅权限、`mail`、`climbTower` 等任务调度和 Worker 稳定性。
+- **可进入内测**：适合少量真实账号验证 Token 同步、订阅权限、任务配置、任务日志、`mail`、`climbTower`、`daily_signin`、`gacha`、`batchFish`、`batchOpenBox` 等任务调度和 Worker 稳定性。
 - **不建议立即公开收费**：真实支付、生产部署和多任务类型稳定性还未达到商业化交付标准。
-- **下一步最优先**：接入真实支付、生产部署验证、逐个任务类型真实运行并补齐超时命令的协议细节。
+- **下一步最优先**：生产部署验证、逐个任务类型真实运行、接入真实支付 provider、完善代理池和监控告警。
 
 ---
 

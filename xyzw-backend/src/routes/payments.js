@@ -4,18 +4,20 @@ async function paymentRoutes(fastify) {
   fastify.post('/api/payments/create', {
     preHandler: [fastify.authenticate],
   }, async (request, reply) => {
-    const { planId, paymentMethod } = request.body || {};
+    const { planId, paymentMethod, maxTokens } = request.body || {};
     const result = await paymentService.createOrder(request.user.id, {
-      planId, paymentMethod,
+      planId, paymentMethod, maxTokens,
     });
     reply.code(201).send(result);
   });
 
   // Third-party payment callback (no auth)
   fastify.post('/api/payments/notify', async (request, reply) => {
-    const { orderNo, tradeNo, status } = request.body || {};
-    // TODO: verify signature from third-party payment provider
-    const success = await paymentService.handleCallback({ orderNo, tradeNo, status });
+    const success = await paymentService.handleCallback({
+      body: request.body || {},
+      query: request.query || {},
+      headers: request.headers || {},
+    });
     reply.send({ success });
   });
 
