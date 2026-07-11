@@ -38,7 +38,7 @@
 | P2 | 游戏引擎迁移 | ✅ 完成 | 2026-07-08 |
 | P3 | 任务调度系统 | ✅ 核心完成，真实 Token Worker 日志已验证 | 2026-07-11 |
 | P4 | 代理 IP + 健康监控 | 🟡 系统代理支持已完成，住宅代理池未接入 | 2026-07-11 |
-| P5 | 前端增量改造 | 🟡 SaaS 核心页面完成，批量任务后端化待完成 | 2026-07-11 |
+| P5 | 前端增量改造 | ✅ SaaS 核心页面 + 后端定时任务配置页完成，批量任务入口已接入后端任务类型 | 2026-07-11 |
 | P6 | 支付系统 | 🟡 框架 + 模拟回调完成，第三方支付待接入 | 2026-07-11 |
 | P7 | 部署与测试 | 🟡 本地验证通过，VPS/生产验证待完成 | 2026-07-11 |
 
@@ -148,6 +148,13 @@ All game engine modules OK!
 - 状态探针结果：`activity_get`、`discount_getdiscountinfo`、`mail_getlist`、`store_goodslist` 有正常响应；`collection_goodslist`、`legion_getinfo`、`car_getrolecar`、`mergebox_getinfo` 等在当前角色状态下无业务响应。
 - `bottle` 已修复为状态跳过：`task_logs.id=26` 成功登录并判定未发现运行中的盐罐机器人，记录为成功跳过。
 - 当前仍需深挖的真实命令：`daily_signin` 的 `system_signinreward`（`task_logs.id=25`）与 `gacha_drawreward`（`task_logs.id=27`）均能登录并执行到命令发送阶段，但未收到业务响应；抓包日志显示命令发出后只收到 `system_newchatmessagenotify` 等非目标响应。
+- 后端任务已覆盖前端批量日常入口中的主要任务类型：日常任务、邮件、挂机、盐罐、俱乐部签到、竞技场、Boss、开箱、按积分开箱、领取宝箱积分、钓鱼、招募、爬塔、怪异塔、宝库、梦境、怪异塔道具/合成、功法、收发车、蟠桃园、换皮闯关等均已接入 `TaskRunner.runBatchTaskValue()` 分发。
+- 后端 WebSocket Promise 匹配已对齐前端：支持优先按响应包 `resp` 数字匹配请求 `seq`，并保留 cmd/响应映射匹配；这修复了 `presetteam_saveteam` 只返回 `resp` 时被后端漏掉导致超时的问题。
+- 一键爬塔 `climbTower` 已真实验证：
+  - `task_logs.id=43`：修复响应匹配后，后端不再卡在 `presetteam_saveteam`，可直接执行 `fight_starttower`，连续成功 6 次，之后被 `1500040 上座塔奖励未领取` 卡住。
+  - `task_logs.id=44`：补齐 `1500040` 自动领取奖励逻辑后，成功领取第 36/37/38 层奖励并继续爬塔，最终打到体力耗尽。
+  - `task_logs.id=45`：补齐 `1500020 能量不足` 正常结束逻辑后，日志状态为 `success`，`tasksRun=1`，`tasksFailed=0`，证明一键爬塔可以作为后端定时任务稳定收尾。
+- 后端任务日志现在能展示 `resp:序号` 这类无 cmd 的协议响应，方便后续排查只返回 `resp` 的游戏业务包。
 
 ---
 
@@ -183,7 +190,7 @@ All game engine modules OK!
 | 60 | Register 页面 | ✅ | `src/views/Auth/Register.vue` |
 | 61 | 路由 + 认证守卫 | ✅ | `src/router/index.js`（修改） |
 | 62 | tokenStore 改造 | 🟡 部分完成 | 本地 Token 已可自动同步到后端；CRUD 全后端化待重构 |
-| 63 | BatchDailyTasks 改造 | 🔲 待完成 | 任务配置改为 API 持久化 |
+| 63 | BatchDailyTasks 改造 | ✅ | 后端定时任务配置页已支持从批量任务类型中勾选任务并持久化到 API |
 | 64 | SSE Composable | ✅ | `src/composables/useSSE.js` |
 | 65 | TaskLogs 页面 | ✅ | `src/views/TaskLogs.vue`，摘要、筛选、状态、耗时、失败原因、步骤时间线 |
 | 66 | DefaultLayout 导航修改 | ✅ | 已增加订阅入口和任务日志入口 |
@@ -194,6 +201,8 @@ All game engine modules OK!
 - `/tokens` 页面显示当前 SaaS 账号、套餐等级、Token 用量上限。
 - `/subscription` 页面已上线，可展示当前套餐与套餐卡片。
 - `/admin/task-logs` 页面已上线，可查看后端登录时间、任务类型、执行状态、耗时、失败原因和详细步骤时间线。
+- `/admin/task-schedules` 页面已上线，可按 Token 创建后端定时任务，支持勾选日常任务和前端批量日常中的其他任务类型，并设置每天/间隔等不同执行周期。
+- Token 管理、订阅套餐、后端定时任务、任务日志已统一放入 `/admin` 管理区；顶部导航已优化，避免新增“任务日志”后挤压“批量xx”入口。
 - `/tokens` 页面已增加“任务日志”快捷入口。
 - 微信扫码导入 Token 已恢复可用；导入后的本地 Token 会自动同步到后端 `/api/tokens`。
 
@@ -381,8 +390,8 @@ xyzw-backend/
 - [ ] 第三方支付对接（虎皮椒/PayJS）— 获取 appId/secret 后实现 `paymentService.createOrder` 中的 TODO
 - [ ] 生产环境密钥生成 — `openssl rand -hex 32` 生成 JWT_SECRET 和 TOKEN_ENCRYPT_KEY
 - [ ] Vultr VPS/目标服务器部署验证 — `docker-compose up -d` 后跑通 API、前端、Worker、Redis、PostgreSQL
-- [ ] BatchDailyTasks.vue 改造 — 任务配置走后端 API 持久化
-- [ ] 逐个任务类型真实修复 — `mail` 已跑通；`bottle`、`legion_signin` 已能按当前角色状态成功跳过；`daily_signin`、`gacha` 仍需真实前端在线对照或更深抓包
+- [x] 后端定时任务配置页 — 已支持按 Token 创建后端任务，勾选日常/批量任务类型并持久化到 API
+- [ ] 逐个任务类型真实修复 — `mail`、`climbTower` 已真实跑通；`bottle`、`legion_signin` 已能按当前角色状态成功跳过；`daily_signin`、`gacha` 仍需真实前端在线对照或更深抓包
 
 ### 优先级 P1（上线后一周内）
 
@@ -460,10 +469,10 @@ xyzw-backend/
 ### 暂不满足正式上线的部分
 
 - 第三方真实支付尚未接入，当前只有模拟回调/管理员激活框架。
-- BatchDailyTasks 仍以现有前端批量任务为主，尚未完全切换到后端任务配置持久化。
+- 前端原批量任务页面仍可作为即时执行入口；后端定时任务配置页已支持创建持久化定时任务，但仍需要继续做更多任务类型的真实稳定性验证。
 - VPS/生产环境部署尚未完成端到端验证。
 - 住宅代理 IP 池尚未接入，仅支持系统级代理环境变量。
-- 多数具体任务类型尚未逐个真实跑通；当前 `mail` 已稳定成功，`bottle` 和 `legion_signin` 对当前角色状态可成功跳过，`daily_signin`、`gacha` 仍需真实前端在线对照或更深抓包。
+- 多数具体任务类型尚未逐个真实跑通；当前 `mail`、`climbTower` 已真实成功，`bottle` 和 `legion_signin` 对当前角色状态可成功跳过，`daily_signin`、`gacha` 仍需真实前端在线对照或更深抓包。
 
 ### 当前真实验证结论
 
@@ -474,13 +483,15 @@ xyzw-backend/
 - `daily_signin` 已成功通过代理连接游戏服务器并获取角色信息；只执行签到相关动作，没有执行竞技场、Boss、邮件、瓶子等整套日常。
 - `legion_signin` 最新验证 `task_logs.id=24`：成功获取角色信息，因当前角色未加入军团而成功跳过。
 - `bottle` 最新验证 `task_logs.id=26`：成功获取角色信息，因 `bottleHelpers.helperStopTime=0` 判定没有运行中的盐罐机器人，成功跳过。
+- `climbTower` 最新验证 `task_logs.id=45`：成功登录真实角色，获取阵容/爬塔/角色信息，发送 `fight_starttower` 后收到 `1500020 能量不足`，按预期记录为正常结束，任务日志状态 `success`。
+- `climbTower` 深度验证 `task_logs.id=44`：在体力未耗尽时成功自动处理 `1500040 上座塔奖励未领取`，领取奖励后继续爬塔，证明后端可以连续发送爬塔战斗命令并处理奖励卡点。
 - 签到命令 `system_signinreward` 与免费扭蛋 `gacha_drawreward` 当前仍表现为请求超时；补齐响应映射后仍未收到目标业务响应，抓包日志显示命令发出后只收到聊天通知。
 
 ### 建议上线判断
 
-- **可进入内测**：适合少量真实账号验证 Token 同步、订阅权限、`mail` 等低风险任务调度和 Worker 稳定性。
-- **不建议立即公开收费**：真实支付、生产部署、批量任务后端化和多任务类型稳定性还未达到商业化交付标准。
-- **下一步最优先**：BatchDailyTasks 后端化、接入真实支付、逐个任务类型验证并补齐超时命令的协议细节。
+- **可进入内测**：适合少量真实账号验证 Token 同步、订阅权限、`mail`、`climbTower` 等任务调度和 Worker 稳定性。
+- **不建议立即公开收费**：真实支付、生产部署和多任务类型稳定性还未达到商业化交付标准。
+- **下一步最优先**：接入真实支付、生产部署验证、逐个任务类型真实运行并补齐超时命令的协议细节。
 
 ---
 
